@@ -4,3 +4,4 @@ pub mod clip_service;
 pub mod rating_service;
 pub mod room_service;
 pub mod user_service;
+pub mod world_service;
