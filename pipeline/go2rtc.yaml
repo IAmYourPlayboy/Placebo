@@ -1,0 +1,39 @@
+# go2rtc media proxy config for Placebo
+# Проксирует YouTube Live / RTSP / MJPEG → HLS для фронтенда
+#
+# Использование:
+#   cd pipeline && docker compose up go2rtc -d
+#   Открыть http://localhost:1984 для WebUI
+#   HLS endpoint: http://localhost:1984/api/stream.m3u8?src=shibuya-crossing
+#
+# Для поиска YouTube Live ID:
+#   1. Открыть youtube.com, поиск "shibuya crossing live camera 24/7"
+#   2. Фильтр "Live" → скопировать video ID из URL
+#   3. Заменить VIDEO_ID ниже на реальный ID
+
+streams:
+  # Shibuya Scramble Crossing — Live Cam (cam 1)
+  shibuya-crossing:
+    - "exec:/scripts/youtube-stream.sh https://www.youtube.com/watch?v=dfVK7ld38Ys"
+
+  # Shibuya Scramble Crossing — Live Camera (cam 2)
+  shibuya-station:
+    - "exec:/scripts/youtube-stream.sh https://www.youtube.com/watch?v=8H3nRCFVR6Y"
+
+  # Tokyo cam 3
+  hachiko-square:
+    - "exec:/scripts/youtube-stream.sh https://www.youtube.com/watch?v=ehJbjfH1dIo"
+
+  # Tokyo Shinjuku
+  center-gai:
+    - "exec:/scripts/youtube-stream.sh https://www.youtube.com/watch?v=6dp-bvQ7RWo"
+
+# WebRTC / API settings
+api:
+  listen: ":1984"
+
+webrtc:
+  listen: ":8555"
+
+log:
+  level: info

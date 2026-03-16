@@ -1,0 +1,41 @@
+# osm2pgsql style file for Placebo 3D World
+# Full import: buildings + roads + water + parks + landuse
+#
+# Format: osm_tag  data_type  flags  column_name
+
+# ─── Names ────────────────────────────────────────
+node,way  name           text    linear
+
+# ─── Buildings ────────────────────────────────────
+node,way  building       text    polygon
+node,way  building:levels text   polygon
+node,way  building:height text   polygon
+node,way  building:min_level text polygon
+node,way  building:min_height text polygon
+node,way  building:colour text   polygon
+node,way  building:color  text   polygon
+node,way  building:material text polygon
+node,way  height         text    polygon
+node,way  min_height     text    polygon
+node,way  roof:shape     text    polygon
+node,way  roof:height    text    polygon
+node,way  roof:colour    text    polygon
+node,way  addr:street    text    polygon
+node,way  addr:housenumber text  polygon
+
+# ─── Roads ────────────────────────────────────────
+node,way  highway        text    linear
+node,way  railway        text    linear
+node,way  surface        text    linear
+node,way  lanes          text    linear
+node,way  oneway         text    linear
+
+# ─── Water ────────────────────────────────────────
+node,way  water          text    polygon
+node,way  waterway       text    linear
+
+# ─── Land use / Parks ─────────────────────────────
+node,way  amenity        text    polygon
+node,way  landuse        text    polygon
+node,way  leisure        text    polygon
+node,way  natural        text    polygon

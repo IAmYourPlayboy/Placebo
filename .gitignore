@@ -7,18 +7,44 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
+# Dependencies
+node_modules/
+
+# Build
 dist
 dist-ssr
+target/
+
+# Environment / secrets
+.env
+.env.local
+.env.*.local
 *.local
 
-# Editor directories and files
+# IDE
 .vscode/*
 !.vscode/extensions.json
-.idea
-.DS_Store
+.idea/
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
+*.swp
+*.swo
+
+# macOS
+.DS_Store
+
+# Claude Code local
+.claude/
+
+# Superpowers brainstorm sessions
+.superpowers/
+
+# OSM data (large binary files)
+pipeline/pbf/*.pbf
+pipeline/pbf/*.osm
+
+# Tauri build
+src-tauri/target/

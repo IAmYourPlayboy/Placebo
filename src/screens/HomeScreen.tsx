@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { IcBell, IcClock, IcBookmark, IcSearch, IcHeart } from "../components/Icons";
 
-interface HomeProps { onEnterRoom?: () => void; }
+interface HomeProps { onEnterRoom?: () => void; onEnter3D?: () => void; }
 
 const ROOMS = [
   { id: 1, title: "Концерт Шамана",          loc: "г. Тольятти",     viewers: 52,  hot: true,  live: true,  bg: "linear-gradient(140deg,#1a0e2e,#2d1845)" },
@@ -72,7 +72,7 @@ function RoomCard({ room, onClick }: { room: typeof ROOMS[number]; onClick?: () 
   );
 }
 
-export default function HomeScreen({ onEnterRoom }: HomeProps) {
+export default function HomeScreen({ onEnterRoom, onEnter3D }: HomeProps) {
   return (
     <div className="screen">
       <header className="topbar">
@@ -94,7 +94,7 @@ export default function HomeScreen({ onEnterRoom }: HomeProps) {
             <span className="section__title">Прямо сейчас в мире:</span>
             <button className="section__link">Все →</button>
           </div>
-          <WorldMapCard onClick={onEnterRoom} />
+          <WorldMapCard onClick={onEnter3D} />
         </div>
 
         {/* Популярное */}

@@ -1,0 +1,84 @@
+# Placebo 3D Tiles Pipeline
+# Генерация 3D-моделей зданий из OpenStreetMap для Placebo 3D World
+#
+# Использование:
+#   docker compose up -d postgis
+#   ./scripts/generate-tiles.sh tokyo
+#   # Результат: ./output/tokyo/tileset.json + .b3dm файлы
+
+services:
+  # ── PostGIS ────────────────────────────────────────────
+  postgis:
+    image: postgis/postgis:16-3.4
+    container_name: placebo-postgis
+    environment:
+      POSTGRES_DB: placebo_tiles
+      POSTGRES_USER: placebo
+      POSTGRES_PASSWORD: placebo_dev_only
+    ports:
+      - "5433:5432"          # 5433 чтобы не конфликтовать с локальным PG
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./sql:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U placebo -d placebo_tiles"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ── osm2pgsql ──────────────────────────────────────────
+  # Импорт OSM PBF → PostGIS
+  osm2pgsql:
+    image: iboates/osm2pgsql:latest
+    container_name: placebo-osm2pgsql
+    depends_on:
+      postgis:
+        condition: service_healthy
+    volumes:
+      - ./data:/data
+      - ./styles:/styles
+    entrypoint: ["sleep", "infinity"]   # Запускаем команды вручную
+
+  # ── pg2b3dm ────────────────────────────────────────────
+  # Конвертация PostGIS 3D → 3D Tiles (.b3dm)
+  pg2b3dm:
+    image: geodan/pg2b3dm:latest
+    container_name: placebo-pg2b3dm
+    depends_on:
+      postgis:
+        condition: service_healthy
+    volumes:
+      - ./output:/output
+    entrypoint: ["sleep", "infinity"]   # Запускаем команды вручную
+
+  # ── HTTP-сервер для разработки ─────────────────────────
+  # Отдаёт 3D Tiles локально для фронтенда
+  tile-server:
+    image: nginx:alpine
+    container_name: placebo-tile-server
+    ports:
+      - "8090:80"
+    volumes:
+      - ./output:/usr/share/nginx/html:ro
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - postgis
+
+  # ── go2rtc media proxy ──────────────────────────────────
+  # Проксирует YouTube Live / RTSP / MJPEG → HLS для фронтенда
+  go2rtc:
+    build:
+      context: .
+      dockerfile: Dockerfile.go2rtc
+    image: placebo-go2rtc:latest
+    container_name: placebo-go2rtc
+    ports:
+      - "1984:1984"      # API + WebUI
+      - "8555:8555/tcp"   # WebRTC
+    volumes:
+      - ./go2rtc.yaml:/config/go2rtc.yaml
+      - ./scripts:/scripts:ro
+    restart: unless-stopped
+
+volumes:
+  pgdata:
