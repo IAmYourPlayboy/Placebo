@@ -4,3 +4,4 @@ pub mod clip_repo;
 pub mod rating_repo;
 pub mod room_repo;
 pub mod user_repo;
+pub mod world_repo;
