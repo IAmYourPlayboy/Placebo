@@ -1,77 +1,82 @@
-import { useRef } from 'react';
-import { useThree } from '@react-three/fiber';
+import { useMemo } from 'react';
 import * as THREE from 'three';
-import type { Camera3D } from '../../types/world3d';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import type { BuildingFootprint } from '../../types/world3d';
 
-// 3D Tiles Renderer (NASA AMMOS)
-// import { TilesRenderer } from '3d-tiles-renderer';
-// ^ Этот импорт раскомментировать после npm install 3d-tiles-renderer
+const FILL_COLOR = '#0a0f18';
+const FILL_OPACITY = 0.06;
+const EDGE_COLOR = '#1e2840';
+const EDGE_OPACITY = 0.4;
 
 interface BuildingsLayerProps {
-  /** URL до tileset.json (наш сервер или localhost:8090) */
-  tilesUrl: string;
-  /** Центр мира (координаты активной камеры) */
-  centerLat: number;
-  centerLng: number;
-  /** Активная камера */
-  activeCamera: Camera3D;
+  buildings: BuildingFootprint[];
 }
 
-/**
- * BuildingsLayer — загружает 3D Tiles зданий.
- *
- * Использует NASA 3DTilesRendererJS для стриминга тайлов:
- * - Автоматический LOD по расстоянию от камеры
- * - Frustum culling
- * - Lazy loading (грузит только видимые тайлы)
- */
-export function BuildingsLayer({
-  tilesUrl: _tilesUrl,
-  centerLat: _centerLat,
-  centerLng: _centerLng,
-  activeCamera: _activeCamera,
-}: BuildingsLayerProps) {
-  const groupRef = useRef<THREE.Group>(null);
-  const { camera: _camera, gl: _renderer } = useThree();
+export function BuildingsLayer({ buildings }: BuildingsLayerProps) {
+  const { fillGeo, edgeGeo } = useMemo(() => {
+    if (buildings.length === 0) return { fillGeo: null, edgeGeo: null };
 
-  // ─── 3D Tiles Loader ──────────────────────────────────────
-  //
-  // ВАЖНО: Этот код закомментирован до установки 3d-tiles-renderer.
-  // Раскомментировать после: npm install 3d-tiles-renderer
-  //
-  // useEffect(() => {
-  //   if (!groupRef.current) return;
-  //
-  //   const tilesRenderer = new TilesRenderer(tilesUrl);
-  //   tilesRenderer.setCamera(camera);
-  //   tilesRenderer.setResolutionFromRenderer(camera, renderer);
-  //
-  //   // LOD настройка
-  //   tilesRenderer.errorTarget = 6;
-  //   tilesRenderer.maxDepth = 15;
-  //
-  //   // Центрируем тайлсет на начале координат
-  //   tilesRenderer.addEventListener('load-root-tileset', () => {
-  //     const sphere = new THREE.Sphere();
-  //     tilesRenderer.getBoundingSphere(sphere);
-  //     tilesRenderer.group.position.copy(sphere.center).multiplyScalar(-1);
-  //
-  //     // Поворачиваем так чтобы Y=вверх (3D Tiles используют Z-up)
-  //     tilesRenderer.group.rotation.x = -Math.PI / 2;
-  //   });
-  //
-  //   groupRef.current.add(tilesRenderer.group);
-  //
-  //   return () => {
-  //     tilesRenderer.dispose();
-  //     groupRef.current?.remove(tilesRenderer.group);
-  //   };
-  // }, [tilesUrl, camera, renderer]);
-  //
-  // useFrame(() => {
-  //   camera.updateMatrixWorld();
-  //   tilesRenderer?.update();
-  // });
+    const fillGeometries: THREE.BufferGeometry[] = [];
+    const edgeGeometries: THREE.BufferGeometry[] = [];
 
-  return <group ref={groupRef} />;
+    for (const b of buildings) {
+      if (b.outline.length < 3 || b.height <= 0) continue;
+
+      const shape = new THREE.Shape();
+      shape.moveTo(b.outline[0].x, b.outline[0].z);
+      for (let i = 1; i < b.outline.length; i++) {
+        shape.lineTo(b.outline[i].x, b.outline[i].z);
+      }
+
+      const extruded = new THREE.ExtrudeGeometry(shape, {
+        depth: b.height,
+        bevelEnabled: false,
+      });
+
+      // ExtrudeGeometry extrudes along local Z → rotate to Y-up
+      extruded.rotateX(-Math.PI / 2);
+
+      fillGeometries.push(extruded);
+      edgeGeometries.push(new THREE.EdgesGeometry(extruded));
+    }
+
+    const fillGeo = fillGeometries.length > 0
+      ? mergeGeometries(fillGeometries, false)
+      : null;
+    const edgeGeo = edgeGeometries.length > 0
+      ? mergeGeometries(edgeGeometries, false)
+      : null;
+
+    // Dispose individual geometries
+    for (const g of fillGeometries) g.dispose();
+    for (const g of edgeGeometries) g.dispose();
+
+    return { fillGeo: fillGeo ?? null, edgeGeo: edgeGeo ?? null };
+  }, [buildings]);
+
+  return (
+    <group>
+      {fillGeo && (
+        <mesh geometry={fillGeo}>
+          <meshBasicMaterial
+            color={FILL_COLOR}
+            opacity={FILL_OPACITY}
+            transparent
+            depthWrite={false}
+            side={THREE.DoubleSide}
+          />
+        </mesh>
+      )}
+      {edgeGeo && (
+        <lineSegments geometry={edgeGeo}>
+          <lineBasicMaterial
+            color={EDGE_COLOR}
+            opacity={EDGE_OPACITY}
+            transparent
+            depthWrite={false}
+          />
+        </lineSegments>
+      )}
+    </group>
+  );
 }
