@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { useTimeOfDay } from '../../../hooks/useTimeOfDay';
 import { useQuality } from '../../../hooks/useQuality';
-import type { RoadSegment } from '../../../hooks/useRoadNetwork';
+import type { RoadSegment } from '../../../types/world3d';
 
 interface NightLightsProps {
   timezone?: string;

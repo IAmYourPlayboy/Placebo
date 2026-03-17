@@ -48,7 +48,6 @@ export default function World3DScreen({ onBack }: World3DScreenProps) {
         nearbyCameras={cameras}
         onCameraSelect={handleCameraSelect}
         timezone="Asia/Tokyo"
-        tilesUrl="" // Пока нет 3D Tiles, BuildingsLayer рисует mock здания
         showStats={true}
       />
 
