@@ -2,7 +2,7 @@ import { useQuality } from '../../../hooks/useQuality';
 import { GroundPlane } from './GroundPlane';
 import { GroundGrid } from './GroundGrid';
 import { RoadNetwork } from './RoadNetwork';
-import type { RoadSegment } from '../../../hooks/useRoadNetwork';
+import type { RoadSegment } from '../../../types/world3d';
 
 interface GroundSystemProps {
   roads: RoadSegment[];
