@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import type { RoadSegment, WaterFeature, ParkFeature, BuildingFootprint } from '../types/world3d';
 
 // API base – in dev this is the local axum server
-const API_BASE = 'http://localhost:3000';
+const API_BASE = 'http://localhost:3001';
 
 interface CityTilesResult {
   roads: RoadSegment[];

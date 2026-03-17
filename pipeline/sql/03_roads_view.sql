@@ -19,7 +19,7 @@ SELECT
     WHEN 'pedestrian' THEN 3
     WHEN 'path' THEN 1.5
     ELSE 5
-  END AS width_meters
+  END::float8 AS width_meters
 FROM planet_osm_line
 WHERE highway IS NOT NULL
   AND highway NOT IN ('proposed', 'construction', 'abandoned', 'platform');
