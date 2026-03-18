@@ -1,3 +1,4 @@
+pub mod auth_service;
 pub mod boost_service;
 pub mod camera_service;
 pub mod clip_service;
