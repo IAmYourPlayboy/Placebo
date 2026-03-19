@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import type { RoadSegment, WaterFeature, ParkFeature, BuildingFootprint } from '../types/world3d';
 
-// API base – in dev this is the local axum server
-const API_BASE = 'http://localhost:3001';
+// API base – empty string = same origin (Vite proxy forwards /api to axum)
+const API_BASE = '';
 
 interface CityTilesResult {
   roads: RoadSegment[];
@@ -87,10 +87,46 @@ export function useCityTiles(
         for (const result of results) {
           if (result.status === 'fulfilled') {
             const data = result.value;
-            if (data.roads) allRoads.push(...data.roads);
-            if (data.water) allWater.push(...data.water);
-            if (data.parks) allParks.push(...data.parks);
-            if (data.buildings) allBuildings.push(...data.buildings);
+            // Map API response → frontend types
+            // API: { coords: [x,z][], highway, name, width_meters, ... }
+            // Frontend: { points: {x,z}[], highway, name, width, ... }
+            if (data.roads) {
+              for (const r of data.roads) {
+                allRoads.push({
+                  points: (r.coords ?? []).map((c: number[]) => ({ x: c[0], z: c[1] })),
+                  highway: r.highway,
+                  name: r.name,
+                  width: r.width_meters ?? 5,
+                });
+              }
+            }
+            if (data.water) {
+              for (const w of data.water) {
+                allWater.push({
+                  points: (w.coords ?? []).map((c: number[]) => ({ x: c[0], z: c[1] })),
+                  type: w.type,
+                  geomType: w.geomType ?? w.geom_type ?? 'polygon',
+                  name: w.name,
+                });
+              }
+            }
+            if (data.parks) {
+              for (const p of data.parks) {
+                allParks.push({
+                  points: (p.coords ?? []).map((c: number[]) => ({ x: c[0], z: c[1] })),
+                  type: p.park_type ?? p.type ?? 'park',
+                  name: p.name,
+                });
+              }
+            }
+            if (data.buildings) {
+              for (const b of data.buildings) {
+                allBuildings.push({
+                  outline: (b.coords ?? []).map((c: number[]) => ({ x: c[0], z: c[1] })),
+                  height: b.height_meters ?? 10,
+                });
+              }
+            }
           }
         }
 
@@ -108,7 +144,11 @@ export function useCityTiles(
     };
 
     fetchTiles();
-    return () => controller.abort();
+    return () => {
+      controller.abort();
+      // Reset key so StrictMode re-run will re-fetch
+      prevTileKey.current = '';
+    };
   }, [centerLat, centerLng, zoom]);
 
   return { roads, water, parks, buildings, loading, error };

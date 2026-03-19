@@ -8,12 +8,9 @@ interface World3DScreenProps {
   onBack: () => void;
 }
 
-// Stream URL helper (same logic as useNearbyCameras)
-const GO2RTC_URL = import.meta.env.VITE_GO2RTC_URL as string | undefined;
+// HLS proxy on Vite dev server (yt-dlp + CORS proxy)
 function streamUrl(slug: string): string {
-  return GO2RTC_URL
-    ? `${GO2RTC_URL}/api/stream.m3u8?src=${slug}`
-    : `/test-streams/${slug}.mp4`;
+  return `/hls-proxy?src=${slug}`;
 }
 
 // Стартовая камера – Shibuya Crossing
