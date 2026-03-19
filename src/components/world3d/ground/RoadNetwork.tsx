@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import * as THREE from 'three';
-import type { RoadSegment } from '../../../hooks/useRoadNetwork';
+import type { RoadSegment } from '../../../types/world3d';
 
 interface RoadNetworkProps {
   roads: RoadSegment[];

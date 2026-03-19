@@ -11,3 +11,4 @@ export { SkySystem } from './sky';
 export { GroundSystem } from './ground';
 export { LightingSystem } from './lighting';
 export { PostStack } from './post';
+export { DynamicFog } from './DynamicFog';

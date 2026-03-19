@@ -166,7 +166,7 @@ function useManualVideoTexture(src: string | null): THREE.VideoTexture | null {
     };
 
     // HLS streams (.m3u8) → use hls.js
-    const isHls = src.includes('.m3u8');
+    const isHls = src.includes('.m3u8') || src.includes('hls-proxy');
     if (isHls) {
       import('hls.js').then(({ default: Hls }) => {
         // Guard: if cleanup ran before async import resolved, bail out
@@ -178,25 +178,40 @@ function useManualVideoTexture(src: string | null): THREE.VideoTexture | null {
           lowLatencyMode: false,
           liveSyncDurationCount: 3,
           liveMaxLatencyDurationCount: 10,
-          fragLoadingMaxRetry: 3,
+          fragLoadingMaxRetry: 6,
           fragLoadingRetryDelay: 2000,
-          levelLoadingMaxRetry: 3,
-          levelLoadingRetryDelay: 2000,
-          manifestLoadingMaxRetry: 3,
+          levelLoadingMaxRetry: 6,
+          levelLoadingRetryDelay: 3000,
+          manifestLoadingMaxRetry: 6,
+          manifestLoadingRetryDelay: 3000,
           maxBufferLength: 10,
           maxMaxBufferLength: 30,
         });
         hlsRef.current = hls;
+
+        let retryCount = 0;
+        const MAX_FULL_RETRIES = 5;
+
         hls.loadSource(src);
         hls.attachMedia(video);
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
           if (!abortedRef.current) video.play().catch(() => {});
         });
         hls.on(Hls.Events.ERROR, (_: any, data: any) => {
-          if (data.fatal) {
-            console.warn('[HLS] fatal:', data.details);
-            if (data.type === 'networkError') hls.startLoad();
-            else if (data.type === 'mediaError') hls.recoverMediaError();
+          if (data.fatal && !abortedRef.current) {
+            console.warn('[HLS] fatal:', data.details, `(retry ${retryCount}/${MAX_FULL_RETRIES})`);
+            if (data.type === 'mediaError') {
+              hls.recoverMediaError();
+            } else if (retryCount < MAX_FULL_RETRIES) {
+              // Full reload after delay – handles cold-start exec sources
+              retryCount++;
+              setTimeout(() => {
+                if (!abortedRef.current && hlsRef.current) {
+                  hls.loadSource(src);
+                  hls.startLoad();
+                }
+              }, 3000);
+            }
           }
         });
         video.addEventListener('loadedmetadata', onReady);

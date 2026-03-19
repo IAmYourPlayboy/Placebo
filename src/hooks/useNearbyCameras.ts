@@ -3,17 +3,11 @@ import type { Camera3D, CameraOrientation } from '../types/world3d';
 import { DEFAULT_ORIENTATION, geoDistance } from '../types/world3d';
 
 // ─── Stream URL helper ────────────────────────────────────────
-// Если запущен go2rtc (VITE_GO2RTC_URL), используем HLS endpoint.
-// Иначе — fallback на локальные test MP4.
-const GO2RTC_URL = import.meta.env.VITE_GO2RTC_URL as string | undefined;
-console.log('[Placebo] GO2RTC_URL =', GO2RTC_URL);
+// HLS proxy on Vite dev server handles yt-dlp + CORS proxying.
+// Frontend just points hls.js at /hls-proxy?src=slug
 
 function streamUrl(slug: string): string {
-  const url = GO2RTC_URL
-    ? `${GO2RTC_URL}/api/stream.m3u8?src=${slug}`
-    : `/test-streams/${slug}.mp4`;
-  console.log('[Placebo] streamUrl', slug, '→', url);
-  return url;
+  return `/hls-proxy?src=${slug}`;
 }
 
 /**

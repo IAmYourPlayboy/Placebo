@@ -2,63 +2,19 @@
 
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Deliver real OSM geometry (roads, water, parks, buildings) from PostGIS to the Placebo 3D world via a tile-based JSON API.
+**Goal:** Serve real OSM geometry (roads, water, parks, buildings) from PostGIS through an axum tile API to the React Three Fiber 3D world.
 
-**Architecture:** Axum endpoint queries 4 PostGIS views in parallel, caches raw results in Redis, converts lat/lng to local meters per-request, returns JSON. React hook `useCityTiles` fetches a 3×3 tile grid and feeds data to R3F components.
+**Architecture:** PostGIS SQL views → Rust repo (raw queries) → service (Redis cache + coordinate conversion) → handler (validation + JSON response) → useCityTiles hook (tile grid fetch) → R3F components (geometry rendering). Server does all heavy lifting; client receives ready-to-render local-meter coordinates.
 
-**Tech Stack:** Rust/axum + sqlx + PostGIS, Redis, React + TypeScript, React Three Fiber, Three.js
+**Tech Stack:** PostgreSQL 17 + PostGIS 3.6.2, axum 0.7, sqlx 0.8, deadpool-redis, React 18, React Three Fiber, Three.js
 
 **Spec:** `docs/superpowers/specs/2026-03-16-osm-tile-pipeline-design.md`
 
 ---
 
-## File Structure
+## Chunk 1: SQL Views + Indexes (Database Layer)
 
-### New files
-
-| File | Responsibility |
-|------|----------------|
-| `pipeline/sql/03_roads_view.sql` | SQL: roads_view with width_meters |
-| `pipeline/sql/04_water_view.sql` | SQL: water_view (polygon + line UNION) |
-| `pipeline/sql/05_parks_view.sql` | SQL: parks_view |
-| `pipeline/sql/06_buildings_tile_view.sql` | SQL: buildings_tile_view (2D, for tiles) |
-| `pipeline/sql/07_indexes.sql` | Partial indexes for filtered queries |
-| `crates/placebo-api/src/handlers/world.rs` | Tile endpoint handler + query params |
-| `crates/placebo-api/src/repositories/world_repo.rs` | PostGIS queries for 4 layers |
-| `crates/placebo-api/src/services/world_service.rs` | Coord conversion, response assembly, Redis cache |
-| `src/hooks/useCityTiles.ts` | Tile fetching + merging hook |
-| `src/components/world3d/ground/WaterBodies.tsx` | Water polygon/ribbon rendering |
-| `src/components/world3d/ground/Parks.tsx` | Park polygon rendering |
-| `src/components/world3d/DynamicFog.tsx` | Time-based fog color |
-
-### Modified files
-
-| File | Change |
-|------|--------|
-| `src/types/world3d.ts` | Add RoadSegment, WaterFeature, ParkFeature, BuildingFootprint, DEFAULT_ROAD_WIDTHS |
-| `crates/placebo-api/src/handlers/mod.rs` | Add `pub mod world;`, nest `/world` route |
-| `crates/placebo-api/src/repositories/mod.rs` | Add `pub mod world_repo;` |
-| `crates/placebo-api/src/services/mod.rs` | Add `pub mod world_service;` |
-| `src/components/world3d/BuildingsLayer.tsx` | Rewrite: ExtrudeGeometry from real footprints |
-| `src/components/world3d/ground/GroundSystem.tsx` | Add water + parks children |
-| `src/components/world3d/ground/index.ts` | Export WaterBodies, Parks |
-| `src/components/world3d/WorldScene.tsx` | useCityTiles, DynamicFog, new props |
-| `src/components/world3d/ground/RoadNetwork.tsx` | Import RoadSegment from types/ |
-| `src/components/world3d/lighting/LightingSystem.tsx` | Import RoadSegment from types/ |
-| `src/components/world3d/lighting/NightLights.tsx` | Import RoadSegment from types/ |
-| `src/screens/World3DScreen.tsx` | Remove tilesUrl prop from WorldScene |
-
-### Deleted files
-
-| File | Reason |
-|------|--------|
-| `src/hooks/useRoadNetwork.ts` | Replaced by useCityTiles (deleted in Chunk 5, after all imports updated) |
-
----
-
-## Chunk 1: PostGIS Views & Indexes
-
-### Task 1: Create SQL views for roads, water, parks, buildings
+### Task 1: Create SQL views and indexes
 
 **Files:**
 - Create: `pipeline/sql/03_roads_view.sql`
@@ -67,49 +23,41 @@
 - Create: `pipeline/sql/06_buildings_tile_view.sql`
 - Create: `pipeline/sql/07_indexes.sql`
 
-- [ ] **Step 1: Write roads_view SQL**
+- [ ] **Step 1: Create roads_view**
 
-Create `pipeline/sql/03_roads_view.sql`:
-
+Write `pipeline/sql/03_roads_view.sql`:
 ```sql
--- Placebo — Roads View for tile endpoint
--- Filters valid highways with computed width in meters
-
 CREATE OR REPLACE VIEW roads_view AS
 SELECT
   osm_id,
   highway,
   name,
   way,
-  (CASE highway
-    WHEN 'motorway' THEN 15.0
-    WHEN 'trunk' THEN 14.0
-    WHEN 'primary' THEN 12.0
-    WHEN 'secondary' THEN 9.0
-    WHEN 'tertiary' THEN 7.0
-    WHEN 'residential' THEN 6.0
-    WHEN 'unclassified' THEN 5.0
-    WHEN 'service' THEN 4.0
-    WHEN 'footway' THEN 2.0
-    WHEN 'cycleway' THEN 2.0
+  CASE highway
+    WHEN 'motorway' THEN 15
+    WHEN 'trunk' THEN 14
+    WHEN 'primary' THEN 12
+    WHEN 'secondary' THEN 9
+    WHEN 'tertiary' THEN 7
+    WHEN 'residential' THEN 6
+    WHEN 'unclassified' THEN 5
+    WHEN 'service' THEN 4
+    WHEN 'footway' THEN 2
+    WHEN 'cycleway' THEN 2
     WHEN 'steps' THEN 1.5
-    WHEN 'pedestrian' THEN 3.0
+    WHEN 'pedestrian' THEN 3
     WHEN 'path' THEN 1.5
-    ELSE 5.0
-  END)::float8 AS width_meters
+    ELSE 5
+  END AS width_meters
 FROM planet_osm_line
 WHERE highway IS NOT NULL
   AND highway NOT IN ('proposed', 'construction', 'abandoned', 'platform');
 ```
 
-- [ ] **Step 2: Write water_view SQL**
+- [ ] **Step 2: Create water_view**
 
-Create `pipeline/sql/04_water_view.sql`:
-
+Write `pipeline/sql/04_water_view.sql`:
 ```sql
--- Placebo — Water View for tile endpoint
--- UNION of polygon water (lakes) and linear water (rivers/streams)
-
 CREATE OR REPLACE VIEW water_view AS
 SELECT osm_id, 'polygon' AS geom_type,
        COALESCE(water, "natural") AS water_type, name, way
@@ -123,13 +71,10 @@ FROM planet_osm_line
 WHERE waterway IN ('river', 'stream', 'canal', 'drain');
 ```
 
-- [ ] **Step 3: Write parks_view SQL**
+- [ ] **Step 3: Create parks_view**
 
-Create `pipeline/sql/05_parks_view.sql`:
-
+Write `pipeline/sql/05_parks_view.sql`:
 ```sql
--- Placebo — Parks View for tile endpoint
-
 CREATE OR REPLACE VIEW parks_view AS
 SELECT osm_id,
        COALESCE(leisure, "natural", landuse) AS park_type,
@@ -140,23 +85,19 @@ WHERE leisure IN ('park', 'garden', 'playground', 'pitch')
    OR landuse IN ('grass', 'forest', 'recreation_ground', 'cemetery', 'meadow');
 ```
 
-- [ ] **Step 4: Write buildings_tile_view SQL**
+- [ ] **Step 4: Create buildings_tile_view**
 
-Create `pipeline/sql/06_buildings_tile_view.sql`:
-
+Write `pipeline/sql/06_buildings_tile_view.sql`:
 ```sql
--- Placebo — Buildings Tile View (2D footprints for tile endpoint)
--- Separate from buildings_3d which is for pg2b3dm
-
 CREATE OR REPLACE VIEW buildings_tile_view AS
 SELECT
   osm_id,
   way,
-  (CASE
-    WHEN height ~ '^\d+(\.\d+)?$' THEN height::float8
+  CASE
+    WHEN height ~ '^\d+(\.\d+)?$' THEN height::float
     WHEN "building:levels" ~ '^\d+$' THEN "building:levels"::int * 3.0
     ELSE 9.0
-  END)::float8 AS height_meters,
+  END AS height_meters,
   name
 FROM planet_osm_polygon
 WHERE building IS NOT NULL
@@ -164,89 +105,69 @@ WHERE building IS NOT NULL
   AND ST_Area(way::geography) > 10;
 ```
 
-- [ ] **Step 5: Write partial indexes**
+- [ ] **Step 5: Create partial indexes**
 
-Create `pipeline/sql/07_indexes.sql`:
-
+Write `pipeline/sql/07_indexes.sql`:
 ```sql
--- Placebo — Partial indexes for tile query performance
-
 CREATE INDEX IF NOT EXISTS idx_line_highway
-  ON planet_osm_line (highway)
-  WHERE highway IS NOT NULL;
-
+  ON planet_osm_line (highway) WHERE highway IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_polygon_building
-  ON planet_osm_polygon (building)
-  WHERE building IS NOT NULL AND building != 'no';
-
+  ON planet_osm_polygon (building) WHERE building IS NOT NULL AND building != 'no';
 CREATE INDEX IF NOT EXISTS idx_polygon_water
-  ON planet_osm_polygon (water)
-  WHERE water IS NOT NULL;
-
+  ON planet_osm_polygon (water) WHERE water IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_polygon_leisure
-  ON planet_osm_polygon (leisure)
-  WHERE leisure IS NOT NULL;
+  ON planet_osm_polygon (leisure) WHERE leisure IS NOT NULL;
 ```
 
-- [ ] **Step 6: Execute all SQL against the placebo database**
+- [ ] **Step 6: Run all SQL against PostGIS and verify**
 
-Run:
 ```bash
-psql -d placebo -f pipeline/sql/03_roads_view.sql
-psql -d placebo -f pipeline/sql/04_water_view.sql
-psql -d placebo -f pipeline/sql/05_parks_view.sql
-psql -d placebo -f pipeline/sql/06_buildings_tile_view.sql
-psql -d placebo -f pipeline/sql/07_indexes.sql
+for f in pipeline/sql/03_roads_view.sql pipeline/sql/04_water_view.sql pipeline/sql/05_parks_view.sql pipeline/sql/06_buildings_tile_view.sql pipeline/sql/07_indexes.sql; do
+  psql -d placebo -f "$f"
+done
+psql -d placebo -c "SELECT 'roads' AS view, count(*) FROM roads_view UNION ALL SELECT 'water', count(*) FROM water_view UNION ALL SELECT 'parks', count(*) FROM parks_view UNION ALL SELECT 'buildings', count(*) FROM buildings_tile_view;"
 ```
+Expected: roads ~200K+, water ~5K+, parks ~10K+, buildings ~500K+
 
-- [ ] **Step 7: Verify views with test queries**
+- [ ] **Step 7: Verify bbox query performance (Shibuya)**
 
-Run:
 ```bash
-psql -d placebo -c "SELECT count(*) FROM roads_view;"
-psql -d placebo -c "SELECT count(*) FROM water_view;"
-psql -d placebo -c "SELECT count(*) FROM parks_view;"
-psql -d placebo -c "SELECT count(*) FROM buildings_tile_view;"
+psql -d placebo -c "EXPLAIN ANALYZE SELECT count(*) FROM roads_view WHERE way && ST_MakeEnvelope(139.695, 35.658, 139.710, 35.668, 4326);"
 ```
+Expected: <50ms, index scan on `planet_osm_line_way_idx`
 
-Expected: All return row counts > 0 (roads ~800K+, buildings ~500K+).
-
-- [ ] **Step 8: Verify spatial query performance for Shibuya bbox**
-
-Run:
-```bash
-psql -d placebo -c "EXPLAIN ANALYZE SELECT count(*) FROM roads_view WHERE ST_Intersects(way, ST_MakeEnvelope(139.695, 35.658, 139.705, 35.665, 4326));"
-```
-
-Expected: Uses GIST index scan, completes in <50ms.
-
-- [ ] **Step 9: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
 git add pipeline/sql/03_roads_view.sql pipeline/sql/04_water_view.sql pipeline/sql/05_parks_view.sql pipeline/sql/06_buildings_tile_view.sql pipeline/sql/07_indexes.sql
-git commit -m "feat(pipeline): add SQL views for roads, water, parks, buildings tiles"
+git commit -m "feat(sql): add roads, water, parks, buildings views + indexes for tile API"
 ```
 
 ---
 
-## Chunk 2: Axum Tile API (Backend)
+## Chunk 2: Rust Backend (Repository + Service + Handler)
 
-### Task 2: World repository – PostGIS queries
+### Task 2: Rust repository – types and PostGIS queries
 
 **Files:**
 - Create: `crates/placebo-api/src/repositories/world_repo.rs`
-- Modify: `crates/placebo-api/src/repositories/mod.rs`
+- Modify: `crates/placebo-api/src/repositories/mod.rs` (add `pub mod world_repo;`)
 
-- [ ] **Step 1: Write world_repo.rs with raw row types and query functions**
+- [ ] **Step 1: Add `pub mod world_repo;` to `repositories/mod.rs`**
+
+In `crates/placebo-api/src/repositories/mod.rs`, add line:
+```rust
+pub mod world_repo;
+```
+
+- [ ] **Step 2: Write world_repo.rs with types and helper functions**
 
 Create `crates/placebo-api/src/repositories/world_repo.rs`:
 
 ```rust
 use sqlx::PgPool;
 
-// ---------------------------------------------------------------------------
-// Raw row types from PostGIS
-// ---------------------------------------------------------------------------
+// ─── Row types (from PostGIS) ───────────────────────────────
 
 #[derive(Debug, sqlx::FromRow)]
 pub struct RoadRow {
@@ -254,24 +175,24 @@ pub struct RoadRow {
     pub highway: String,
     pub name: Option<String>,
     pub width_meters: f64,
-    pub coords_json: serde_json::Value, // ST_AsGeoJSON(...)::jsonb
+    pub geojson: String,
 }
 
 #[derive(Debug, sqlx::FromRow)]
 pub struct WaterRow {
     pub osm_id: i64,
     pub geom_type: String,
-    pub water_type: Option<String>,
+    pub water_type: String,
     pub name: Option<String>,
-    pub coords_json: serde_json::Value,
+    pub geojson: String,
 }
 
 #[derive(Debug, sqlx::FromRow)]
 pub struct ParkRow {
     pub osm_id: i64,
-    pub park_type: Option<String>,
+    pub park_type: String,
     pub name: Option<String>,
-    pub coords_json: serde_json::Value,
+    pub geojson: String,
 }
 
 #[derive(Debug, sqlx::FromRow)]
@@ -279,144 +200,15 @@ pub struct BuildingRow {
     pub osm_id: i64,
     pub height_meters: f64,
     pub name: Option<String>,
-    pub coords_json: serde_json::Value,
+    pub geojson: String,
 }
 
-// ---------------------------------------------------------------------------
-// Tolerance by zoom level (degrees, ~meters at equator)
-// ---------------------------------------------------------------------------
+// ─── Tile math ──────────────────────────────────────────────
 
-fn simplify_tolerance(zoom: u8) -> f64 {
-    match zoom {
-        17 => 0.00001,  // ~1m
-        16 => 0.00005,  // ~5m
-        _  => 0.0001,   // ~10m (z15)
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Query functions – use ST_MakeEnvelope with bound params (no SQL injection)
-// ---------------------------------------------------------------------------
-
-pub async fn get_roads(
-    pool: &PgPool,
-    west: f64, south: f64, east: f64, north: f64,
-    zoom: u8,
-) -> Result<Vec<RoadRow>, sqlx::Error> {
-    let tol = simplify_tolerance(zoom);
-    sqlx::query_as::<_, RoadRow>(&format!(
-        r#"SELECT osm_id, highway, name, width_meters,
-           ST_AsGeoJSON(ST_SimplifyPreserveTopology(way, {tol}))::jsonb AS coords_json
-           FROM roads_view
-           WHERE ST_Intersects(way, ST_MakeEnvelope($1, $2, $3, $4, 4326))
-           LIMIT 5000"#
-    ))
-    .bind(west).bind(south).bind(east).bind(north)
-    .fetch_all(pool)
-    .await
-}
-
-pub async fn get_water(
-    pool: &PgPool,
-    west: f64, south: f64, east: f64, north: f64,
-    zoom: u8,
-) -> Result<Vec<WaterRow>, sqlx::Error> {
-    let tol = simplify_tolerance(zoom);
-    sqlx::query_as::<_, WaterRow>(&format!(
-        r#"SELECT osm_id, geom_type, water_type, name,
-           ST_AsGeoJSON(ST_SimplifyPreserveTopology(way, {tol}))::jsonb AS coords_json
-           FROM water_view
-           WHERE ST_Intersects(way, ST_MakeEnvelope($1, $2, $3, $4, 4326))
-           LIMIT 2000"#
-    ))
-    .bind(west).bind(south).bind(east).bind(north)
-    .fetch_all(pool)
-    .await
-}
-
-pub async fn get_parks(
-    pool: &PgPool,
-    west: f64, south: f64, east: f64, north: f64,
-    zoom: u8,
-) -> Result<Vec<ParkRow>, sqlx::Error> {
-    let tol = simplify_tolerance(zoom);
-    sqlx::query_as::<_, ParkRow>(&format!(
-        r#"SELECT osm_id, park_type, name,
-           ST_AsGeoJSON(ST_SimplifyPreserveTopology(way, {tol}))::jsonb AS coords_json
-           FROM parks_view
-           WHERE ST_Intersects(way, ST_MakeEnvelope($1, $2, $3, $4, 4326))
-           LIMIT 2000"#
-    ))
-    .bind(west).bind(south).bind(east).bind(north)
-    .fetch_all(pool)
-    .await
-}
-
-pub async fn get_buildings(
-    pool: &PgPool,
-    west: f64, south: f64, east: f64, north: f64,
-    zoom: u8,
-) -> Result<Vec<BuildingRow>, sqlx::Error> {
-    let tol = simplify_tolerance(zoom);
-    sqlx::query_as::<_, BuildingRow>(&format!(
-        r#"SELECT osm_id, height_meters, name,
-           ST_AsGeoJSON(ST_SimplifyPreserveTopology(way, {tol}))::jsonb AS coords_json
-           FROM buildings_tile_view
-           WHERE ST_Intersects(way, ST_MakeEnvelope($1, $2, $3, $4, 4326))
-           LIMIT 5000"#
-    ))
-    .bind(west).bind(south).bind(east).bind(north)
-    .fetch_all(pool)
-    .await
-}
-```
-
-- [ ] **Step 2: Register world_repo in mod.rs**
-
-Add to `crates/placebo-api/src/repositories/mod.rs`:
-
-```rust
-pub mod world_repo;
-```
-
-- [ ] **Step 3: Verify it compiles**
-
-Run: `cd /Users/notebook/Placebo && cargo check -p placebo-api`
-Expected: Compiles without errors.
-
-- [ ] **Step 4: Commit**
-
-```bash
-git add crates/placebo-api/src/repositories/world_repo.rs crates/placebo-api/src/repositories/mod.rs
-git commit -m "feat(api): add world_repo with PostGIS tile queries"
-```
-
-### Task 3: World service – coordinate conversion, caching, response assembly
-
-**Files:**
-- Create: `crates/placebo-api/src/services/world_service.rs`
-- Modify: `crates/placebo-api/src/services/mod.rs`
-
-- [ ] **Step 1: Write world_service.rs**
-
-Create `crates/placebo-api/src/services/world_service.rs`:
-
-```rust
-use deadpool_redis::Pool as RedisPool;
-use redis::AsyncCommands;
-use serde::{Deserialize, Serialize};
-use sqlx::PgPool;
-
-use crate::error::AppError;
-use crate::repositories::world_repo;
-
-// ---------------------------------------------------------------------------
-// Slippy Map math
-// ---------------------------------------------------------------------------
-
-/// Compute tile bbox as (west, south, east, north) from z/x/y
+/// Convert Slippy Map tile z/x/y to WGS84 bounding box
+/// Returns (west_lng, south_lat, east_lng, north_lat)
 pub fn tile_to_bbox(z: u8, x: u32, y: u32) -> (f64, f64, f64, f64) {
-    let n = 2.0_f64.powi(z as i32);
+    let n = 2f64.powi(z as i32);
     let west = x as f64 / n * 360.0 - 180.0;
     let east = (x + 1) as f64 / n * 360.0 - 180.0;
     let north = (std::f64::consts::PI * (1.0 - 2.0 * y as f64 / n))
@@ -430,22 +222,146 @@ pub fn tile_to_bbox(z: u8, x: u32, y: u32) -> (f64, f64, f64, f64) {
     (west, south, east, north)
 }
 
-// ---------------------------------------------------------------------------
-// Coordinate conversion (lat/lng → local meters)
-// ---------------------------------------------------------------------------
-
-const METERS_PER_DEGREE: f64 = 111320.0;
-
-fn geo_to_local(lat: f64, lng: f64, center_lat: f64, center_lng: f64) -> (f64, f64) {
-    let cos_lat = center_lat.to_radians().cos();
-    let x = (lng - center_lng) * cos_lat * METERS_PER_DEGREE;
-    let z = (lat - center_lat) * METERS_PER_DEGREE;
-    (x, z)
+pub fn zoom_tolerance(z: u8) -> f64 {
+    match z {
+        17 => 0.00001,
+        16 => 0.00005,
+        15 => 0.0001,
+        _ => 0.00005,
+    }
 }
 
-// ---------------------------------------------------------------------------
-// Cached raw data (stored in Redis as JSON)
-// ---------------------------------------------------------------------------
+// ─── Queries ────────────────────────────────────────────────
+
+pub async fn get_roads(
+    pool: &PgPool,
+    west: f64, south: f64, east: f64, north: f64,
+    tolerance: f64,
+) -> Result<Vec<RoadRow>, sqlx::Error> {
+    sqlx::query_as::<_, RoadRow>(
+        r#"SELECT osm_id, highway, name, width_meters,
+                  ST_AsGeoJSON(ST_SimplifyPreserveTopology(way, $5)) AS geojson
+           FROM roads_view
+           WHERE way && ST_MakeEnvelope($1, $2, $3, $4, 4326)"#,
+    )
+    .bind(west).bind(south).bind(east).bind(north).bind(tolerance)
+    .fetch_all(pool)
+    .await
+}
+
+pub async fn get_water(
+    pool: &PgPool,
+    west: f64, south: f64, east: f64, north: f64,
+    tolerance: f64,
+) -> Result<Vec<WaterRow>, sqlx::Error> {
+    sqlx::query_as::<_, WaterRow>(
+        r#"SELECT osm_id, geom_type, water_type, name,
+                  ST_AsGeoJSON(ST_SimplifyPreserveTopology(way, $5)) AS geojson
+           FROM water_view
+           WHERE way && ST_MakeEnvelope($1, $2, $3, $4, 4326)"#,
+    )
+    .bind(west).bind(south).bind(east).bind(north).bind(tolerance)
+    .fetch_all(pool)
+    .await
+}
+
+pub async fn get_parks(
+    pool: &PgPool,
+    west: f64, south: f64, east: f64, north: f64,
+    tolerance: f64,
+) -> Result<Vec<ParkRow>, sqlx::Error> {
+    sqlx::query_as::<_, ParkRow>(
+        r#"SELECT osm_id, park_type, name,
+                  ST_AsGeoJSON(ST_SimplifyPreserveTopology(way, $5)) AS geojson
+           FROM parks_view
+           WHERE way && ST_MakeEnvelope($1, $2, $3, $4, 4326)"#,
+    )
+    .bind(west).bind(south).bind(east).bind(north).bind(tolerance)
+    .fetch_all(pool)
+    .await
+}
+
+pub async fn get_buildings(
+    pool: &PgPool,
+    west: f64, south: f64, east: f64, north: f64,
+    tolerance: f64,
+) -> Result<Vec<BuildingRow>, sqlx::Error> {
+    sqlx::query_as::<_, BuildingRow>(
+        r#"SELECT osm_id, height_meters, name,
+                  ST_AsGeoJSON(ST_SimplifyPreserveTopology(way, $5)) AS geojson
+           FROM buildings_tile_view
+           WHERE way && ST_MakeEnvelope($1, $2, $3, $4, 4326)"#,
+    )
+    .bind(west).bind(south).bind(east).bind(north).bind(tolerance)
+    .fetch_all(pool)
+    .await
+}
+```
+
+- [ ] **Step 3: Verify compilation**
+
+```bash
+cargo check -p placebo-api
+```
+
+- [ ] **Step 4: Unit test tile_to_bbox**
+
+Add at bottom of `world_repo.rs`:
+```rust
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_tile_to_bbox_shibuya() {
+        let (west, south, east, north) = tile_to_bbox(16, 57483, 25953);
+        // Shibuya area: ~139.69-139.71 lng, ~35.65-35.67 lat
+        assert!((west - 139.691).abs() < 0.01);
+        assert!((east - 139.697).abs() < 0.01);
+        assert!((south - 35.659).abs() < 0.01);
+        assert!((north - 35.664).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_zoom_tolerance() {
+        assert_eq!(zoom_tolerance(17), 0.00001);
+        assert_eq!(zoom_tolerance(16), 0.00005);
+        assert_eq!(zoom_tolerance(15), 0.0001);
+    }
+}
+```
+
+Run: `cargo test -p placebo-api -- world_repo`
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add crates/placebo-api/src/repositories/world_repo.rs crates/placebo-api/src/repositories/mod.rs
+git commit -m "feat(api): add world_repo with PostGIS tile queries and bbox math"
+```
+
+### Task 3: Rust service – caching, coordinate conversion, response assembly
+
+**Files:**
+- Create: `crates/placebo-api/src/services/world_service.rs`
+- Modify: `crates/placebo-api/src/services/mod.rs` (add `pub mod world_service;`)
+
+- [ ] **Step 1: Add `pub mod world_service;` to `services/mod.rs`**
+
+- [ ] **Step 2: Write world_service.rs**
+
+Create `crates/placebo-api/src/services/world_service.rs`:
+
+```rust
+use deadpool_redis::Pool as RedisPool;
+use redis::AsyncCommands;
+use serde::{Deserialize, Serialize};
+use sqlx::PgPool;
+
+use crate::error::AppError;
+use crate::repositories::world_repo;
+
+// ─── Cache types (stored in Redis as lat/lng) ───────────────
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TileRawData {
@@ -467,6 +383,7 @@ pub struct RawRoad {
 pub struct RawWater {
     pub coords: Vec<[f64; 2]>,
     pub water_type: String,
+    pub geom_type: String, // "polygon" | "line"
     pub name: Option<String>,
 }
 
@@ -483,9 +400,7 @@ pub struct RawBuilding {
     pub height: f64,
 }
 
-// ---------------------------------------------------------------------------
-// API response types (local meters)
-// ---------------------------------------------------------------------------
+// ─── API response types ─────────────────────────────────────
 
 #[derive(Debug, Serialize)]
 pub struct TileResponse {
@@ -497,17 +412,10 @@ pub struct TileResponse {
 }
 
 #[derive(Debug, Serialize)]
-pub struct TileInfo {
-    pub z: u8,
-    pub x: u32,
-    pub y: u32,
-}
+pub struct TileInfo { pub z: u8, pub x: u32, pub y: u32 }
 
 #[derive(Debug, Serialize)]
-pub struct Point2D {
-    pub x: f64,
-    pub z: f64,
-}
+pub struct Point2D { pub x: f64, pub z: f64 }
 
 #[derive(Debug, Serialize)]
 pub struct RoadFeature {
@@ -522,6 +430,8 @@ pub struct WaterFeature {
     pub points: Vec<Point2D>,
     #[serde(rename = "type")]
     pub water_type: String,
+    #[serde(rename = "geomType")]
+    pub geom_type: String,
     pub name: Option<String>,
 }
 
@@ -539,167 +449,99 @@ pub struct BuildingFeature {
     pub height: f64,
 }
 
-// ---------------------------------------------------------------------------
-// Extract coords from GeoJSON
-// ---------------------------------------------------------------------------
+// ─── Coordinate conversion ──────────────────────────────────
 
-fn extract_coords(geojson: &serde_json::Value) -> Vec<[f64; 2]> {
-    match geojson.get("type").and_then(|t| t.as_str()) {
-        Some("LineString") => {
-            geojson["coordinates"]
-                .as_array()
-                .map(|arr| {
-                    arr.iter()
-                        .filter_map(|c| {
-                            let a = c.as_array()?;
-                            Some([a.first()?.as_f64()?, a.get(1)?.as_f64()?])
-                        })
-                        .collect()
-                })
+pub fn geo_to_local(lat: f64, lng: f64, center_lat: f64, center_lng: f64) -> (f64, f64) {
+    let x = (lng - center_lng) * center_lat.to_radians().cos() * 111320.0;
+    let z = (lat - center_lat) * 111320.0;
+    (x, z)
+}
+
+// ─── GeoJSON parsing ────────────────────────────────────────
+
+/// Extract coordinate pairs from ST_AsGeoJSON output.
+/// Handles LineString, Polygon (outer ring only), MultiPolygon (first polygon outer ring).
+fn parse_geojson_coords(geojson: &str) -> Vec<[f64; 2]> {
+    let v: serde_json::Value = match serde_json::from_str(geojson) {
+        Ok(v) => v,
+        Err(_) => return vec![],
+    };
+    let geom_type = v["type"].as_str().unwrap_or("");
+    match geom_type {
+        "LineString" => {
+            v["coordinates"].as_array()
+                .map(|arr| arr.iter().filter_map(|c| {
+                    let a = c.as_array()?;
+                    Some([a.first()?.as_f64()?, a.get(1)?.as_f64()?])
+                }).collect())
                 .unwrap_or_default()
         }
-        Some("Polygon") => {
-            // Take outer ring (first element of coordinates)
-            geojson["coordinates"]
-                .as_array()
+        "Polygon" => {
+            v["coordinates"].as_array()
                 .and_then(|rings| rings.first())
                 .and_then(|ring| ring.as_array())
-                .map(|arr| {
-                    arr.iter()
-                        .filter_map(|c| {
-                            let a = c.as_array()?;
-                            Some([a.first()?.as_f64()?, a.get(1)?.as_f64()?])
-                        })
-                        .collect()
-                })
+                .map(|arr| arr.iter().filter_map(|c| {
+                    let a = c.as_array()?;
+                    Some([a.first()?.as_f64()?, a.get(1)?.as_f64()?])
+                }).collect())
                 .unwrap_or_default()
         }
-        Some("MultiPolygon") => {
-            // Take first polygon, outer ring
-            geojson["coordinates"]
-                .as_array()
+        "MultiPolygon" => {
+            v["coordinates"].as_array()
                 .and_then(|polys| polys.first())
                 .and_then(|poly| poly.as_array())
                 .and_then(|rings| rings.first())
                 .and_then(|ring| ring.as_array())
-                .map(|arr| {
-                    arr.iter()
-                        .filter_map(|c| {
-                            let a = c.as_array()?;
-                            Some([a.first()?.as_f64()?, a.get(1)?.as_f64()?])
-                        })
-                        .collect()
-                })
+                .map(|arr| arr.iter().filter_map(|c| {
+                    let a = c.as_array()?;
+                    Some([a.first()?.as_f64()?, a.get(1)?.as_f64()?])
+                }).collect())
                 .unwrap_or_default()
         }
         _ => vec![],
     }
 }
 
-// ---------------------------------------------------------------------------
-// Redis cache helpers
-// ---------------------------------------------------------------------------
+// ─── Row → Raw conversion ───────────────────────────────────
 
-const TILE_CACHE_TTL: u64 = 3600; // 1 hour
-
-async fn get_cached(
-    redis: &RedisPool,
-    z: u8, x: u32, y: u32,
-) -> Option<TileRawData> {
-    let key = format!("tile:{z}:{x}:{y}");
-    let mut conn = redis.get().await.ok()?;
-    let json: Option<String> = conn.get(&key).await.ok()?;
-    json.and_then(|j| serde_json::from_str(&j).ok())
-}
-
-async fn set_cached(
-    redis: &RedisPool,
-    z: u8, x: u32, y: u32,
-    data: &TileRawData,
-) {
-    let key = format!("tile:{z}:{x}:{y}");
-    match serde_json::to_string(data) {
-        Ok(json) => {
-            if let Ok(mut conn) = redis.get().await {
-                if let Err(e) = conn.set_ex::<_, _, ()>(&key, &json, TILE_CACHE_TTL).await {
-                    tracing::warn!("Failed to cache tile {key}: {e}");
-                }
-            }
-        }
-        Err(e) => tracing::warn!("Failed to serialize tile {key}: {e}"),
+fn rows_to_raw(
+    roads: Vec<world_repo::RoadRow>,
+    water: Vec<world_repo::WaterRow>,
+    parks: Vec<world_repo::ParkRow>,
+    buildings: Vec<world_repo::BuildingRow>,
+) -> TileRawData {
+    TileRawData {
+        roads: roads.into_iter().map(|r| RawRoad {
+            coords: parse_geojson_coords(&r.geojson),
+            highway: r.highway,
+            name: r.name,
+            width: r.width_meters,
+        }).collect(),
+        water: water.into_iter().map(|w| RawWater {
+            coords: parse_geojson_coords(&w.geojson),
+            water_type: w.water_type,
+            geom_type: w.geom_type,
+            name: w.name,
+        }).collect(),
+        parks: parks.into_iter().map(|p| RawPark {
+            coords: parse_geojson_coords(&p.geojson),
+            park_type: p.park_type,
+            name: p.name,
+        }).collect(),
+        buildings: buildings.into_iter().map(|b| RawBuilding {
+            coords: parse_geojson_coords(&b.geojson),
+            height: b.height_meters,
+        }).collect(),
     }
 }
 
-// ---------------------------------------------------------------------------
-// Main service function
-// ---------------------------------------------------------------------------
+// ─── Raw → Response conversion (applies center offset) ──────
 
-pub async fn get_tile(
-    db: &PgPool,
-    redis: &RedisPool,
-    z: u8,
-    x: u32,
-    y: u32,
-    center_lat: f64,
-    center_lng: f64,
-) -> Result<TileResponse, AppError> {
-    // Validate zoom
-    if !(15..=17).contains(&z) {
-        return Err(AppError::Validation(
-            "zoom must be 15, 16, or 17".into(),
-        ));
-    }
-
-    // Check Redis cache
-    let raw = if let Some(cached) = get_cached(redis, z, x, y).await {
-        cached
-    } else {
-        // Compute bbox (west, south, east, north)
-        let (w, s, e, n) = tile_to_bbox(z, x, y);
-
-        // 4 parallel queries
-        let (roads_res, water_res, parks_res, buildings_res) = tokio::join!(
-            world_repo::get_roads(db, w, s, e, n, z),
-            world_repo::get_water(db, w, s, e, n, z),
-            world_repo::get_parks(db, w, s, e, n, z),
-            world_repo::get_buildings(db, w, s, e, n, z),
-        );
-
-        let roads_rows = roads_res?;
-        let water_rows = water_res?;
-        let parks_rows = parks_res?;
-        let buildings_rows = buildings_res?;
-
-        // Convert to raw data (lat/lng coords)
-        let raw = TileRawData {
-            roads: roads_rows.iter().map(|r| RawRoad {
-                coords: extract_coords(&r.coords_json),
-                highway: r.highway.clone(),
-                name: r.name.clone(),
-                width: r.width_meters,
-            }).collect(),
-            water: water_rows.iter().map(|w| RawWater {
-                coords: extract_coords(&w.coords_json),
-                water_type: w.water_type.clone().unwrap_or_else(|| "water".into()),
-                name: w.name.clone(),
-            }).collect(),
-            parks: parks_rows.iter().map(|p| RawPark {
-                coords: extract_coords(&p.coords_json),
-                park_type: p.park_type.clone().unwrap_or_else(|| "park".into()),
-                name: p.name.clone(),
-            }).collect(),
-            buildings: buildings_rows.iter().map(|b| RawBuilding {
-                coords: extract_coords(&b.coords_json),
-                height: b.height_meters,
-            }).collect(),
-        };
-
-        // Cache in Redis (fire and forget)
-        set_cached(redis, z, x, y, &raw).await;
-        raw
-    };
-
-    // Convert lat/lng to local meters
+fn raw_to_response(
+    raw: &TileRawData,
+    z: u8, x: u32, y: u32,
+    center_lat: f64, center_lng: f64,
+) -> TileResponse {
     let convert = |coords: &[[f64; 2]]| -> Vec<Point2D> {
         coords.iter().map(|[lng, lat]| {
             let (x, z) = geo_to_local(*lat, *lng, center_lat, center_lng);
@@ -707,7 +549,7 @@ pub async fn get_tile(
         }).collect()
     };
 
-    Ok(TileResponse {
+    TileResponse {
         tile: TileInfo { z, x, y },
         roads: raw.roads.iter().map(|r| RoadFeature {
             points: convert(&r.coords),
@@ -718,6 +560,7 @@ pub async fn get_tile(
         water: raw.water.iter().map(|w| WaterFeature {
             points: convert(&w.coords),
             water_type: w.water_type.clone(),
+            geom_type: w.geom_type.clone(),
             name: w.name.clone(),
         }).collect(),
         parks: raw.parks.iter().map(|p| ParkFeature {
@@ -729,37 +572,118 @@ pub async fn get_tile(
             outline: convert(&b.coords),
             height: b.height,
         }).collect(),
-    })
+    }
+}
+
+// ─── Main entry point ───────────────────────────────────────
+
+const TILE_CACHE_TTL: u64 = 3600; // 1 hour
+
+pub async fn get_tile(
+    pool: &PgPool,
+    redis: &RedisPool,
+    z: u8, x: u32, y: u32,
+    center_lat: f64, center_lng: f64,
+) -> Result<TileResponse, AppError> {
+    let cache_key = format!("tile:{z}:{x}:{y}");
+
+    // Try Redis cache
+    if let Ok(mut conn) = redis.get().await {
+        if let Ok(cached) = conn.get::<_, Option<String>>(&cache_key).await {
+            if let Some(json_str) = cached {
+                if let Ok(raw) = serde_json::from_str::<TileRawData>(&json_str) {
+                    return Ok(raw_to_response(&raw, z, x, y, center_lat, center_lng));
+                }
+            }
+        }
+    }
+
+    // Cache miss – query PostGIS
+    let (west, south, east, north) = world_repo::tile_to_bbox(z, x, y);
+    let tolerance = world_repo::zoom_tolerance(z);
+
+    let (roads_res, water_res, parks_res, buildings_res) = tokio::join!(
+        world_repo::get_roads(pool, west, south, east, north, tolerance),
+        world_repo::get_water(pool, west, south, east, north, tolerance),
+        world_repo::get_parks(pool, west, south, east, north, tolerance),
+        world_repo::get_buildings(pool, west, south, east, north, tolerance),
+    );
+
+    let raw = rows_to_raw(
+        roads_res.map_err(|e| AppError::Internal(e.into()))?,
+        water_res.map_err(|e| AppError::Internal(e.into()))?,
+        parks_res.map_err(|e| AppError::Internal(e.into()))?,
+        buildings_res.map_err(|e| AppError::Internal(e.into()))?,
+    );
+
+    // Cache in Redis (fire-and-forget)
+    if let Ok(json_str) = serde_json::to_string(&raw) {
+        if let Ok(mut conn) = redis.get().await {
+            let _: Result<(), _> = conn.set_ex(&cache_key, &json_str, TILE_CACHE_TTL).await;
+        }
+    }
+
+    Ok(raw_to_response(&raw, z, x, y, center_lat, center_lng))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_geo_to_local_origin() {
+        let (x, z) = geo_to_local(35.6595, 139.7004, 35.6595, 139.7004);
+        assert!((x).abs() < 0.01);
+        assert!((z).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_geo_to_local_offset() {
+        // ~100m east
+        let (x, _z) = geo_to_local(35.6595, 139.7015, 35.6595, 139.7004);
+        assert!((x - 100.0).abs() < 5.0); // ±5m tolerance
+    }
+
+    #[test]
+    fn test_parse_geojson_linestring() {
+        let geojson = r#"{"type":"LineString","coordinates":[[139.70,35.66],[139.71,35.67]]}"#;
+        let coords = parse_geojson_coords(geojson);
+        assert_eq!(coords.len(), 2);
+        assert!((coords[0][0] - 139.70).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_parse_geojson_polygon() {
+        let geojson = r#"{"type":"Polygon","coordinates":[[[139.70,35.66],[139.71,35.66],[139.71,35.67],[139.70,35.66]]]}"#;
+        let coords = parse_geojson_coords(geojson);
+        assert_eq!(coords.len(), 4);
+    }
 }
 ```
 
-- [ ] **Step 2: Register world_service in mod.rs**
+Note: `AppError::Internal` must exist in `error.rs`. Check the existing `AppError` enum – if it doesn't have an `Internal` variant, use whatever variant maps to 500 (e.g., `AppError::Database` or add `Internal(String)`).
 
-Add to `crates/placebo-api/src/services/mod.rs`:
+- [ ] **Step 3: Verify compilation and run tests**
 
-```rust
-pub mod world_service;
+```bash
+cargo check -p placebo-api
+cargo test -p placebo-api -- world_service
 ```
-
-- [ ] **Step 3: Verify compilation**
-
-Run: `cd /Users/notebook/Placebo && cargo check -p placebo-api`
-Expected: Compiles without errors.
 
 - [ ] **Step 4: Commit**
 
 ```bash
 git add crates/placebo-api/src/services/world_service.rs crates/placebo-api/src/services/mod.rs
-git commit -m "feat(api): add world_service with coord conversion and Redis caching"
+git commit -m "feat(api): add world_service with tile caching, geo conversion, GeoJSON parsing"
 ```
 
-### Task 4: World handler – tile endpoint
+### Task 4: Rust handler + router wiring
 
 **Files:**
 - Create: `crates/placebo-api/src/handlers/world.rs`
-- Modify: `crates/placebo-api/src/handlers/mod.rs`
+- Modify: `crates/placebo-api/src/handlers/mod.rs` (add `pub mod world;` + nest route)
 
-- [ ] **Step 1: Write world.rs handler**
+- [ ] **Step 1: Write handler**
 
 Create `crates/placebo-api/src/handlers/world.rs`:
 
@@ -773,12 +697,7 @@ use serde::Deserialize;
 
 use crate::app_state::AppState;
 use crate::error::AppError;
-use crate::services::world_service;
-
-pub fn router() -> Router<AppState> {
-    Router::new()
-        .route("/tile", get(get_tile))
-}
+use crate::services::world_service::{self, TileResponse};
 
 #[derive(Debug, Deserialize)]
 pub struct TileParams {
@@ -789,18 +708,25 @@ pub struct TileParams {
     pub center_lng: f64,
 }
 
+pub fn router() -> Router<AppState> {
+    Router::new().route("/tile", get(get_tile))
+}
+
 async fn get_tile(
     State(state): State<AppState>,
     Query(params): Query<TileParams>,
-) -> Result<Json<world_service::TileResponse>, AppError> {
+) -> Result<Json<TileResponse>, AppError> {
+    if params.z < 15 || params.z > 17 {
+        return Err(AppError::Validation(
+            "Zoom must be between 15 and 17".into(),
+        ));
+    }
+
     let response = world_service::get_tile(
         &state.db,
         &state.redis,
-        params.z,
-        params.x,
-        params.y,
-        params.center_lat,
-        params.center_lng,
+        params.z, params.x, params.y,
+        params.center_lat, params.center_lng,
     )
     .await?;
 
@@ -808,23 +734,13 @@ async fn get_tile(
 }
 ```
 
-- [ ] **Step 2: Register world handler in mod.rs**
+Note: Check `AppError` enum for `Validation` variant. If it doesn't exist, use the appropriate variant or add it.
 
-Modify `crates/placebo-api/src/handlers/mod.rs` – add `pub mod world;` and nest `/world` route:
+- [ ] **Step 2: Wire into router**
+
+In `crates/placebo-api/src/handlers/mod.rs`, add `pub mod world;` and update `api_router()`:
 
 ```rust
-pub mod boosts;
-pub mod cameras;
-pub mod clips;
-pub mod health;
-pub mod ratings;
-pub mod rooms;
-pub mod users;
-pub mod world;
-
-use axum::Router;
-use crate::app_state::AppState;
-
 pub fn api_router() -> Router<AppState> {
     Router::new()
         .nest("/cameras", cameras::router()
@@ -839,63 +755,39 @@ pub fn api_router() -> Router<AppState> {
 }
 ```
 
-- [ ] **Step 3: Verify full API compiles**
+- [ ] **Step 3: Verify full build**
 
-Run: `cd /Users/notebook/Placebo && cargo check -p placebo-api`
-Expected: Compiles without errors.
+```bash
+cargo build -p placebo-api
+```
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 4: Manual test (requires running API server + PostGIS)**
+
+```bash
+# In separate terminal: cargo run -p placebo-api
+curl -s "http://localhost:3000/api/v1/world/tile?z=16&x=57483&y=25953&center_lat=35.6595&center_lng=139.7004" | jq '.roads | length, .water | length, .parks | length, .buildings | length'
+```
+Expected: non-zero counts for roads and buildings at minimum
+
+- [ ] **Step 5: Commit**
 
 ```bash
 git add crates/placebo-api/src/handlers/world.rs crates/placebo-api/src/handlers/mod.rs
-git commit -m "feat(api): add GET /api/v1/world/tile endpoint"
+git commit -m "feat(api): add /api/v1/world/tile endpoint for OSM tile data"
 ```
-
-### Task 5: Test the tile endpoint manually
-
-- [ ] **Step 1: Start the API server**
-
-Run:
-```bash
-cd /Users/notebook/Placebo
-# Ensure .env has DATABASE_URL=postgres://localhost/placebo and REDIS_URL
-cargo run -p placebo-api &
-```
-
-- [ ] **Step 2: Test tile endpoint with curl**
-
-Shibuya Crossing is at approximately lat=35.6595, lng=139.7004. At z=16, tile x≈57483, y≈25953.
-
-Run:
-```bash
-curl -s "http://localhost:3000/api/v1/world/tile?z=16&x=57483&y=25953&center_lat=35.6595&center_lng=139.7004" | python3 -m json.tool | head -50
-```
-
-Expected: JSON with roads, water, parks, buildings arrays containing local-meter coordinates.
-
-- [ ] **Step 3: Verify Redis caching**
-
-Run the same curl again, check Redis:
-```bash
-redis-cli GET "tile:16:57483:25953" | head -c 200
-```
-
-Expected: Cached JSON string present.
 
 ---
 
-## Chunk 3: Frontend Types & Hook
+## Chunk 3: Frontend Types + Hook
 
-### Task 6: Move RoadSegment to types/world3d.ts and add new types
+### Task 5: Add city tile types to world3d.ts
 
 **Files:**
 - Modify: `src/types/world3d.ts`
-- Modify: `src/components/world3d/ground/RoadNetwork.tsx`
-- Modify: `src/components/world3d/ground/GroundSystem.tsx`
 
-- [ ] **Step 1: Add new types to world3d.ts**
+- [ ] **Step 1: Add types at end of file**
 
-Append to `src/types/world3d.ts` before the closing utilities section:
+Append to `src/types/world3d.ts` (after the `localToGeo` / `geoDistance` functions):
 
 ```typescript
 // ─── City Tile Types ────────────────────────────────────────
@@ -916,6 +808,7 @@ export const DEFAULT_ROAD_WIDTHS: Record<string, number> = {
 export interface WaterFeature {
   points: { x: number; z: number }[];
   type: string;
+  geomType: 'polygon' | 'line';
   name: string | null;
 }
 
@@ -933,57 +826,44 @@ export interface BuildingFootprint {
 
 - [ ] **Step 2: Update RoadNetwork.tsx import**
 
-Change `import type { RoadSegment } from '../../../hooks/useRoadNetwork';`
-to `import type { RoadSegment } from '../../../types/world3d';`
+In `src/components/world3d/ground/RoadNetwork.tsx`, change the `RoadSegment` import:
+- Remove inline `RoadSegment` interface if defined locally
+- Add `import { RoadSegment } from '../../../types/world3d';`
 
 - [ ] **Step 3: Update GroundSystem.tsx import**
 
-Change `import type { RoadSegment } from '../../../hooks/useRoadNetwork';`
-to `import type { RoadSegment } from '../../../types/world3d';`
+Same pattern – import `RoadSegment` from `types/world3d` instead of local/hook source.
 
-- [ ] **Step 3b: Update LightingSystem.tsx import**
+- [ ] **Step 4: Verify TypeScript compiles**
 
-In `src/components/world3d/lighting/LightingSystem.tsx`, change:
-`import type { RoadSegment } from '../../../hooks/useRoadNetwork';`
-to `import type { RoadSegment } from '../../../types/world3d';`
-
-- [ ] **Step 3c: Update NightLights.tsx import**
-
-In `src/components/world3d/lighting/NightLights.tsx`, change:
-`import type { RoadSegment } from '../../../hooks/useRoadNetwork';`
-to `import type { RoadSegment } from '../../../types/world3d';`
-
-- [ ] **Step 4: Verify frontend compiles**
-
-Run: `cd /Users/notebook/Placebo && npx tsc --noEmit`
-Expected: No type errors.
+```bash
+npx tsc --noEmit
+```
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/types/world3d.ts src/components/world3d/ground/RoadNetwork.tsx src/components/world3d/ground/GroundSystem.tsx src/components/world3d/lighting/LightingSystem.tsx src/components/world3d/lighting/NightLights.tsx
-git commit -m "feat(types): add RoadSegment, WaterFeature, ParkFeature, BuildingFootprint"
+git add src/types/world3d.ts src/components/world3d/ground/RoadNetwork.tsx src/components/world3d/ground/GroundSystem.tsx
+git commit -m "feat(types): add WaterFeature, ParkFeature, BuildingFootprint types"
 ```
 
-### Task 7: Create useCityTiles hook
+### Task 6: Create useCityTiles hook
 
 **Files:**
 - Create: `src/hooks/useCityTiles.ts`
 
-- [ ] **Step 1: Write useCityTiles.ts**
+- [ ] **Step 1: Write the hook**
 
 Create `src/hooks/useCityTiles.ts`:
 
 ```typescript
 import { useState, useEffect, useRef } from 'react';
-import type {
-  RoadSegment,
-  WaterFeature,
-  ParkFeature,
-  BuildingFootprint,
-} from '../types/world3d';
+import type { RoadSegment, WaterFeature, ParkFeature, BuildingFootprint } from '../types/world3d';
 
-export interface CityTilesResult {
+// API base – in dev this is the local axum server
+const API_BASE = 'http://localhost:3000';
+
+interface CityTilesResult {
   roads: RoadSegment[];
   water: WaterFeature[];
   parks: ParkFeature[];
@@ -992,23 +872,21 @@ export interface CityTilesResult {
   error: string | null;
 }
 
-// ─── Slippy Map tile math ───────────────────────────────────
+interface TileCoord { z: number; x: number; y: number }
 
 function latLngToTile(lat: number, lng: number, zoom: number): { x: number; y: number } {
   const n = 2 ** zoom;
   const x = Math.floor(((lng + 180) / 360) * n);
   const latRad = (lat * Math.PI) / 180;
-  const y = Math.floor(((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * n);
+  const y = Math.floor(
+    ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * n
+  );
   return { x, y };
 }
 
-function getVisibleTiles(
-  centerLat: number,
-  centerLng: number,
-  zoom: number
-): { z: number; x: number; y: number }[] {
-  const center = latLngToTile(centerLat, centerLng, zoom);
-  const tiles: { z: number; x: number; y: number }[] = [];
+function getVisibleTiles(lat: number, lng: number, zoom: number): TileCoord[] {
+  const center = latLngToTile(lat, lng, zoom);
+  const tiles: TileCoord[] = [];
   for (let dx = -1; dx <= 1; dx++) {
     for (let dy = -1; dy <= 1; dy++) {
       tiles.push({ z: zoom, x: center.x + dx, y: center.y + dy });
@@ -1017,106 +895,108 @@ function getVisibleTiles(
   return tiles;
 }
 
-// ─── API base URL ───────────────────────────────────────────
-
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-
-async function fetchTile(
-  z: number, x: number, y: number,
-  centerLat: number, centerLng: number,
-  signal: AbortSignal,
-): Promise<{
-  roads: RoadSegment[];
-  water: WaterFeature[];
-  parks: ParkFeature[];
-  buildings: BuildingFootprint[];
-}> {
-  const url = `${API_BASE}/api/v1/world/tile?z=${z}&x=${x}&y=${y}&center_lat=${centerLat}&center_lng=${centerLng}`;
-  const res = await fetch(url, { signal });
-  if (!res.ok) throw new Error(`Tile fetch failed: ${res.status}`);
-  return res.json();
+function tileCacheKey(tiles: TileCoord[]): string {
+  return tiles.map(t => `${t.z}/${t.x}/${t.y}`).sort().join(',');
 }
-
-// ─── Hook ───────────────────────────────────────────────────
 
 export function useCityTiles(
   centerLat: number,
   centerLng: number,
-  zoom: number = 16
+  zoom: number = 16,
 ): CityTilesResult {
-  const [result, setResult] = useState<CityTilesResult>({
-    roads: [], water: [], parks: [], buildings: [],
-    loading: true, error: null,
-  });
-
-  const abortRef = useRef<AbortController | null>(null);
+  const [roads, setRoads] = useState<RoadSegment[]>([]);
+  const [water, setWater] = useState<WaterFeature[]>([]);
+  const [parks, setParks] = useState<ParkFeature[]>([]);
+  const [buildings, setBuildings] = useState<BuildingFootprint[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const prevTileKey = useRef<string>('');
 
   useEffect(() => {
-    // Abort previous fetch
-    abortRef.current?.abort();
-    const controller = new AbortController();
-    abortRef.current = controller;
-
     const tiles = getVisibleTiles(centerLat, centerLng, zoom);
+    const key = tileCacheKey(tiles);
 
-    setResult(prev => ({ ...prev, loading: true, error: null }));
+    // Skip if same tiles
+    if (key === prevTileKey.current) return;
+    prevTileKey.current = key;
 
-    Promise.all(
-      tiles.map(t => fetchTile(t.z, t.x, t.y, centerLat, centerLng, controller.signal))
-    )
-      .then(responses => {
-        if (controller.signal.aborted) return;
+    const controller = new AbortController();
+    setLoading(true);
+    setError(null);
 
-        const roads: RoadSegment[] = [];
-        const water: WaterFeature[] = [];
-        const parks: ParkFeature[] = [];
-        const buildings: BuildingFootprint[] = [];
+    const fetchTiles = async () => {
+      try {
+        const results = await Promise.allSettled(
+          tiles.map(t =>
+            fetch(
+              `${API_BASE}/api/v1/world/tile?z=${t.z}&x=${t.x}&y=${t.y}&center_lat=${centerLat}&center_lng=${centerLng}`,
+              { signal: controller.signal }
+            ).then(res => {
+              if (!res.ok) throw new Error(`Tile ${t.z}/${t.x}/${t.y}: ${res.status}`);
+              return res.json();
+            })
+          )
+        );
 
-        for (const r of responses) {
-          roads.push(...r.roads);
-          water.push(...r.water);
-          parks.push(...r.parks);
-          buildings.push(...r.buildings);
+        const allRoads: RoadSegment[] = [];
+        const allWater: WaterFeature[] = [];
+        const allParks: ParkFeature[] = [];
+        const allBuildings: BuildingFootprint[] = [];
+
+        for (const result of results) {
+          if (result.status === 'fulfilled') {
+            const data = result.value;
+            if (data.roads) allRoads.push(...data.roads);
+            if (data.water) allWater.push(...data.water);
+            if (data.parks) allParks.push(...data.parks);
+            if (data.buildings) allBuildings.push(...data.buildings);
+          }
         }
 
-        setResult({ roads, water, parks, buildings, loading: false, error: null });
-      })
-      .catch(err => {
-        if (controller.signal.aborted) return;
-        console.error('[useCityTiles] fetch error:', err);
-        setResult(prev => ({ ...prev, loading: false, error: err.message }));
-      });
+        setRoads(allRoads);
+        setWater(allWater);
+        setParks(allParks);
+        setBuildings(allBuildings);
+      } catch (err: unknown) {
+        if (err instanceof Error && err.name !== 'AbortError') {
+          setError(err.message);
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
 
+    fetchTiles();
     return () => controller.abort();
   }, [centerLat, centerLng, zoom]);
 
-  return result;
+  return { roads, water, parks, buildings, loading, error };
 }
 ```
 
-- [ ] **Step 2: Verify useCityTiles compiles**
+- [ ] **Step 2: Verify TypeScript compiles**
 
-Run: `cd /Users/notebook/Placebo && npx tsc --noEmit`
-Expected: Compiles (useRoadNetwork.ts still exists, WorldScene still imports it – updated in Chunk 5).
+```bash
+npx tsc --noEmit
+```
 
 - [ ] **Step 3: Commit**
 
 ```bash
 git add src/hooks/useCityTiles.ts
-git commit -m "feat(hooks): add useCityTiles tile fetching hook"
+git commit -m "feat(hooks): add useCityTiles hook for tile-based city geometry fetching"
 ```
 
 ---
 
 ## Chunk 4: R3F Components (Water, Parks, Buildings, DynamicFog)
 
-### Task 8: WaterBodies component
+### Task 7: WaterBodies component
 
 **Files:**
 - Create: `src/components/world3d/ground/WaterBodies.tsx`
-- Modify: `src/components/world3d/ground/index.ts`
 
-- [ ] **Step 1: Write WaterBodies.tsx**
+- [ ] **Step 1: Write component**
 
 Create `src/components/world3d/ground/WaterBodies.tsx`:
 
@@ -1125,124 +1005,88 @@ import { useMemo } from 'react';
 import * as THREE from 'three';
 import type { WaterFeature } from '../../../types/world3d';
 
+const WATER_COLOR = '#0a1a3a';
+const WATER_OPACITY = 0.4;
+const RIVER_WIDTH = 8; // meters
+
 interface WaterBodiesProps {
   water: WaterFeature[];
 }
 
-const RIVER_WIDTH = 8; // meters
-
-function tessellateRibbon(points: { x: number; z: number }[], width: number): Float32Array | null {
-  if (points.length < 2) return null;
-  const halfW = width / 2;
+function tessellateRibbon(points: { x: number; z: number }[], halfWidth: number): Float32Array {
   const verts: number[] = [];
-
   for (let i = 0; i < points.length - 1; i++) {
-    const curr = points[i];
-    const next = points[i + 1];
-    const dx = next.x - curr.x;
-    const dz = next.z - curr.z;
+    const p0 = points[i];
+    const p1 = points[i + 1];
+    const dx = p1.x - p0.x;
+    const dz = p1.z - p0.z;
     const len = Math.sqrt(dx * dx + dz * dz);
-    if (len < 0.01) continue;
-
-    const px = -dz / len;
-    const pz = dx / len;
-
-    verts.push(curr.x + px * halfW, 0.02, curr.z + pz * halfW);
-    verts.push(curr.x - px * halfW, 0.02, curr.z - pz * halfW);
-    verts.push(next.x + px * halfW, 0.02, next.z + pz * halfW);
-    verts.push(curr.x - px * halfW, 0.02, curr.z - pz * halfW);
-    verts.push(next.x - px * halfW, 0.02, next.z - pz * halfW);
-    verts.push(next.x + px * halfW, 0.02, next.z + pz * halfW);
+    if (len < 0.001) continue;
+    const nx = (-dz / len) * halfWidth;
+    const nz = (dx / len) * halfWidth;
+    const y = 0.02;
+    verts.push(p0.x - nx, y, p0.z - nz);
+    verts.push(p0.x + nx, y, p0.z + nz);
+    verts.push(p1.x - nx, y, p1.z - nz);
+    verts.push(p1.x - nx, y, p1.z - nz);
+    verts.push(p0.x + nx, y, p0.z + nz);
+    verts.push(p1.x + nx, y, p1.z + nz);
   }
-
-  return verts.length > 0 ? new Float32Array(verts) : null;
-}
-
-function createPolygonGeometry(points: { x: number; z: number }[]): THREE.ShapeGeometry | null {
-  if (points.length < 3) return null;
-
-  const shape = new THREE.Shape();
-  shape.moveTo(points[0].x, points[0].z);
-  for (let i = 1; i < points.length; i++) {
-    shape.lineTo(points[i].x, points[i].z);
-  }
-  shape.closePath();
-
-  return new THREE.ShapeGeometry(shape);
+  return new Float32Array(verts);
 }
 
 export function WaterBodies({ water }: WaterBodiesProps) {
-  const { polygonGeom, ribbonVertices } = useMemo(() => {
-    const polygonGeometries: THREE.ShapeGeometry[] = [];
-    const ribbonArrays: Float32Array[] = [];
-
-    for (const feature of water) {
-      // Heuristic: if first point == last point → polygon (lake)
-      const pts = feature.points;
-      const isClosed =
-        pts.length >= 3 &&
-        Math.abs(pts[0].x - pts[pts.length - 1].x) < 0.1 &&
-        Math.abs(pts[0].z - pts[pts.length - 1].z) < 0.1;
-
-      if (isClosed && pts.length >= 4) {
-        const geom = createPolygonGeometry(pts);
-        if (geom) polygonGeometries.push(geom);
-      } else {
-        const ribbon = tessellateRibbon(pts, RIVER_WIDTH);
-        if (ribbon) ribbonArrays.push(ribbon);
+  const { polygonGeo, lineGeo } = useMemo(() => {
+    // Polygon water (lakes, ponds)
+    const shapes: THREE.Shape[] = [];
+    for (const w of water) {
+      if (w.geomType !== 'polygon' || w.points.length < 3) continue;
+      const shape = new THREE.Shape();
+      shape.moveTo(w.points[0].x, w.points[0].z);
+      for (let i = 1; i < w.points.length; i++) {
+        shape.lineTo(w.points[i].x, w.points[i].z);
       }
+      shapes.push(shape);
     }
+    const polygonGeo = shapes.length > 0
+      ? new THREE.ShapeGeometry(shapes)
+      : null;
 
-    // Merge ribbon arrays
-    let mergedRibbon: Float32Array | null = null;
-    if (ribbonArrays.length > 0) {
-      const totalLen = ribbonArrays.reduce((s, a) => s + a.length, 0);
-      mergedRibbon = new Float32Array(totalLen);
-      let offset = 0;
-      for (const arr of ribbonArrays) {
-        mergedRibbon.set(arr, offset);
-        offset += arr.length;
-      }
+    // Line water (rivers, streams) – ribbon mesh
+    const allVerts: number[] = [];
+    for (const w of water) {
+      if (w.geomType !== 'line' || w.points.length < 2) continue;
+      const ribbon = tessellateRibbon(w.points, RIVER_WIDTH / 2);
+      for (let i = 0; i < ribbon.length; i++) allVerts.push(ribbon[i]);
     }
+    const lineGeo = allVerts.length > 0
+      ? new THREE.BufferGeometry().setAttribute(
+          'position',
+          new THREE.Float32BufferAttribute(allVerts, 3)
+        )
+      : null;
 
-    return {
-      polygonGeom: polygonGeometries,
-      ribbonVertices: mergedRibbon,
-    };
+    return { polygonGeo, lineGeo };
   }, [water]);
-
-  if (water.length === 0) return null;
 
   return (
     <group>
-      {/* Polygon water (lakes) – rendered as flat ShapeGeometry */}
-      {polygonGeom.map((geom, i) => (
-        <mesh key={`wp-${i}`} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]}>
-          <primitive object={geom} attach="geometry" />
+      {polygonGeo && (
+        <mesh geometry={polygonGeo} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]}>
           <meshBasicMaterial
-            color="#0a1a3a"
-            opacity={0.4}
+            color={WATER_COLOR}
+            opacity={WATER_OPACITY}
             transparent
             depthWrite={false}
             side={THREE.DoubleSide}
           />
         </mesh>
-      ))}
-
-      {/* Line water (rivers) – ribbon mesh */}
-      {ribbonVertices && (
-        <mesh>
-          <bufferGeometry>
-            <bufferAttribute
-              attach="attributes-position"
-              array={ribbonVertices}
-              count={ribbonVertices.length / 3}
-              itemSize={3}
-            />
-          </bufferGeometry>
+      )}
+      {lineGeo && (
+        <mesh geometry={lineGeo}>
           <meshBasicMaterial
-            color="#0a1a3a"
-            opacity={0.4}
+            color={WATER_COLOR}
+            opacity={WATER_OPACITY}
             transparent
             depthWrite={false}
             side={THREE.DoubleSide}
@@ -1254,28 +1098,21 @@ export function WaterBodies({ water }: WaterBodiesProps) {
 }
 ```
 
-- [ ] **Step 2: Export from index.ts**
+Note: `ShapeGeometry` is created in XY plane, so we rotate -PI/2 around X to lay flat on XZ. The ribbon mesh is already in XZ plane (y=0.02 hardcoded).
 
-Add to `src/components/world3d/ground/index.ts`:
-
-```typescript
-export { WaterBodies } from './WaterBodies';
-```
-
-- [ ] **Step 3: Commit**
+- [ ] **Step 2: Commit**
 
 ```bash
-git add src/components/world3d/ground/WaterBodies.tsx src/components/world3d/ground/index.ts
-git commit -m "feat(world3d): add WaterBodies component for lakes and rivers"
+git add src/components/world3d/ground/WaterBodies.tsx
+git commit -m "feat(3d): add WaterBodies component for lakes and rivers"
 ```
 
-### Task 9: Parks component
+### Task 8: Parks component
 
 **Files:**
 - Create: `src/components/world3d/ground/Parks.tsx`
-- Modify: `src/components/world3d/ground/index.ts`
 
-- [ ] **Step 1: Write Parks.tsx**
+- [ ] **Step 1: Write component**
 
 Create `src/components/world3d/ground/Parks.tsx`:
 
@@ -1284,169 +1121,141 @@ import { useMemo } from 'react';
 import * as THREE from 'three';
 import type { ParkFeature } from '../../../types/world3d';
 
+const PARK_COLOR = '#0a2a0a';
+const PARK_OPACITY = 0.3;
+
 interface ParksProps {
   parks: ParkFeature[];
 }
 
 export function Parks({ parks }: ParksProps) {
-  const geometries = useMemo(() => {
-    const result: THREE.ShapeGeometry[] = [];
-
-    for (const park of parks) {
-      const pts = park.points;
-      if (pts.length < 3) continue;
-
+  const geometry = useMemo(() => {
+    const shapes: THREE.Shape[] = [];
+    for (const p of parks) {
+      if (p.points.length < 3) continue;
       const shape = new THREE.Shape();
-      shape.moveTo(pts[0].x, pts[0].z);
-      for (let i = 1; i < pts.length; i++) {
-        shape.lineTo(pts[i].x, pts[i].z);
+      shape.moveTo(p.points[0].x, p.points[0].z);
+      for (let i = 1; i < p.points.length; i++) {
+        shape.lineTo(p.points[i].x, p.points[i].z);
       }
-      shape.closePath();
-
-      result.push(new THREE.ShapeGeometry(shape));
+      shapes.push(shape);
     }
-
-    return result;
+    return shapes.length > 0 ? new THREE.ShapeGeometry(shapes) : null;
   }, [parks]);
 
-  if (geometries.length === 0) return null;
+  if (!geometry) return null;
 
   return (
-    <group>
-      {geometries.map((geom, i) => (
-        <mesh key={`park-${i}`} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, 0]}>
-          <primitive object={geom} attach="geometry" />
-          <meshBasicMaterial
-            color="#0a2a0a"
-            opacity={0.3}
-            transparent
-            depthWrite={false}
-            side={THREE.DoubleSide}
-          />
-        </mesh>
-      ))}
-    </group>
+    <mesh geometry={geometry} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, 0]}>
+      <meshBasicMaterial
+        color={PARK_COLOR}
+        opacity={PARK_OPACITY}
+        transparent
+        depthWrite={false}
+        side={THREE.DoubleSide}
+      />
+    </mesh>
   );
 }
 ```
 
-- [ ] **Step 2: Export from index.ts**
-
-Add to `src/components/world3d/ground/index.ts`:
-
-```typescript
-export { Parks } from './Parks';
-```
-
-- [ ] **Step 3: Commit**
+- [ ] **Step 2: Commit**
 
 ```bash
-git add src/components/world3d/ground/Parks.tsx src/components/world3d/ground/index.ts
-git commit -m "feat(world3d): add Parks component for green areas"
+git add src/components/world3d/ground/Parks.tsx
+git commit -m "feat(3d): add Parks component for green areas"
 ```
 
-### Task 10: Rewrite BuildingsLayer with real footprints
+### Task 9: BuildingsLayer rewrite
 
 **Files:**
 - Modify: `src/components/world3d/BuildingsLayer.tsx`
 
-- [ ] **Step 1: Rewrite BuildingsLayer.tsx**
+- [ ] **Step 1: Rewrite BuildingsLayer**
 
-Replace entire contents of `src/components/world3d/BuildingsLayer.tsx`:
+Replace entire content of `src/components/world3d/BuildingsLayer.tsx`:
 
 ```tsx
-import { useMemo, useEffect, useRef } from 'react';
+import { useMemo } from 'react';
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { BuildingFootprint } from '../../types/world3d';
+
+const FILL_COLOR = '#0a0f18';
+const FILL_OPACITY = 0.06;
+const EDGE_COLOR = '#1e2840';
+const EDGE_OPACITY = 0.4;
 
 interface BuildingsLayerProps {
   buildings: BuildingFootprint[];
 }
 
-/**
- * BuildingsLayer – extruded wireframe buildings from real OSM footprints.
- *
- * Each building:
- *   outline → THREE.Shape → ExtrudeGeometry → glass fill + edge wireframe
- *
- * Visual style: glass-like wireframe (dark fill + visible edges).
- * NOTE: Performance TODO – batch into merged BufferGeometry for large counts.
- */
 export function BuildingsLayer({ buildings }: BuildingsLayerProps) {
-  const prevFills = useRef<THREE.ExtrudeGeometry[]>([]);
-  const prevEdges = useRef<THREE.EdgesGeometry[]>([]);
+  const { fillGeo, edgeGeo } = useMemo(() => {
+    if (buildings.length === 0) return { fillGeo: null, edgeGeo: null };
 
-  const { fills, edges } = useMemo(() => {
-    const fillGeometries: THREE.ExtrudeGeometry[] = [];
-    const edgeGeometries: THREE.EdgesGeometry[] = [];
+    const fillGeometries: THREE.BufferGeometry[] = [];
+    const edgeGeometries: THREE.BufferGeometry[] = [];
 
-    for (const building of buildings) {
-      const pts = building.outline;
-      if (pts.length < 3) continue;
+    for (const b of buildings) {
+      if (b.outline.length < 3 || b.height <= 0) continue;
 
       const shape = new THREE.Shape();
-      shape.moveTo(pts[0].x, pts[0].z);
-      for (let i = 1; i < pts.length; i++) {
-        shape.lineTo(pts[i].x, pts[i].z);
+      shape.moveTo(b.outline[0].x, b.outline[0].z);
+      for (let i = 1; i < b.outline.length; i++) {
+        shape.lineTo(b.outline[i].x, b.outline[i].z);
       }
-      shape.closePath();
 
       const extruded = new THREE.ExtrudeGeometry(shape, {
-        depth: building.height,
+        depth: b.height,
         bevelEnabled: false,
       });
 
-      // Rotate so extrusion goes up (Y axis) instead of Z
+      // ExtrudeGeometry extrudes along local Z. We need Y-up.
+      // Rotate -90° around X to convert Z-up → Y-up
       extruded.rotateX(-Math.PI / 2);
 
       fillGeometries.push(extruded);
       edgeGeometries.push(new THREE.EdgesGeometry(extruded));
     }
 
-    return { fills: fillGeometries, edges: edgeGeometries };
+    const fillGeo = fillGeometries.length > 0
+      ? mergeGeometries(fillGeometries, false)
+      : null;
+    const edgeGeo = edgeGeometries.length > 0
+      ? mergeGeometries(edgeGeometries, false)
+      : null;
+
+    // Dispose individual geometries
+    for (const g of fillGeometries) g.dispose();
+    for (const g of edgeGeometries) g.dispose();
+
+    return { fillGeo: fillGeo ?? null, edgeGeo: edgeGeo ?? null };
   }, [buildings]);
-
-  // Dispose old geometries on change
-  useEffect(() => {
-    // Dispose previous
-    prevFills.current.forEach(g => g.dispose());
-    prevEdges.current.forEach(g => g.dispose());
-    // Store current for next cleanup
-    prevFills.current = fills;
-    prevEdges.current = edges;
-
-    return () => {
-      fills.forEach(g => g.dispose());
-      edges.forEach(g => g.dispose());
-    };
-  }, [fills, edges]);
-
-  if (fills.length === 0) return null;
 
   return (
     <group>
-      {fills.map((geom, i) => (
-        <group key={`bld-${i}`}>
-          {/* Glass fill */}
-          <mesh geometry={geom}>
-            <meshBasicMaterial
-              color="#0a0f18"
-              opacity={0.06}
-              transparent
-              side={THREE.DoubleSide}
-              depthWrite={false}
-            />
-          </mesh>
-          {/* Edge wireframe */}
-          <lineSegments geometry={edges[i]}>
-            <lineBasicMaterial
-              color="#1e2840"
-              opacity={0.4}
-              transparent
-            />
-          </lineSegments>
-        </group>
-      ))}
+      {fillGeo && (
+        <mesh geometry={fillGeo}>
+          <meshBasicMaterial
+            color={FILL_COLOR}
+            opacity={FILL_OPACITY}
+            transparent
+            depthWrite={false}
+            side={THREE.DoubleSide}
+          />
+        </mesh>
+      )}
+      {edgeGeo && (
+        <lineSegments geometry={edgeGeo}>
+          <lineBasicMaterial
+            color={EDGE_COLOR}
+            opacity={EDGE_OPACITY}
+            transparent
+            depthWrite={false}
+          />
+        </lineSegments>
+      )}
     </group>
   );
 }
@@ -1456,23 +1265,32 @@ export function BuildingsLayer({ buildings }: BuildingsLayerProps) {
 
 ```bash
 git add src/components/world3d/BuildingsLayer.tsx
-git commit -m "feat(world3d): rewrite BuildingsLayer with real OSM footprints"
+git commit -m "feat(3d): rewrite BuildingsLayer with real OSM footprints + wireframe"
 ```
 
-### Task 11: DynamicFog component
+### Task 10: DynamicFog component
 
 **Files:**
 - Create: `src/components/world3d/DynamicFog.tsx`
 
-- [ ] **Step 1: Write DynamicFog.tsx**
+- [ ] **Step 1: Write component**
 
 Create `src/components/world3d/DynamicFog.tsx`:
 
 ```tsx
-import { useRef } from 'react';
-import { useFrame, useThree } from '@react-three/fiber';
+import { useRef, useEffect } from 'react';
+import { useThree, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useTimeOfDay } from '../../hooks/useTimeOfDay';
+
+const FOG_COLORS: Record<string, string> = {
+  night: '#050510',
+  dawn: '#1a1020',
+  morning: '#2a4060',
+  day: '#4a6a8a',
+  dusk: '#3a2020',
+  twilight: '#0a0a1a',
+};
 
 interface DynamicFogProps {
   timezone: string;
@@ -1480,42 +1298,24 @@ interface DynamicFogProps {
   far: number;
 }
 
-const FOG_COLORS: Record<string, string> = {
-  night:    '#050510',
-  dawn:     '#1a1020',
-  morning:  '#2a4060',
-  day:      '#4a6a8a',
-  dusk:     '#3a2020',
-  twilight: '#0a0a1a',
-};
-
-/**
- * DynamicFog — updates scene.fog color based on time of day.
- * Smooth lerp transition between phases.
- */
 export function DynamicFog({ timezone, near, far }: DynamicFogProps) {
   const { scene } = useThree();
-  const { phase } = useTimeOfDay(timezone);
-  const targetColor = useRef(new THREE.Color(FOG_COLORS[phase] || '#0a0a1a'));
-  const currentColor = useRef(new THREE.Color(FOG_COLORS[phase] || '#0a0a1a'));
+  const timeOfDay = useTimeOfDay(timezone);
+  const targetColor = useRef(new THREE.Color(FOG_COLORS.day));
 
-  // Update target when phase changes
-  const prevPhase = useRef(phase);
-  if (prevPhase.current !== phase) {
-    targetColor.current.set(FOG_COLORS[phase] || '#0a0a1a');
-    prevPhase.current = phase;
-  }
+  useEffect(() => {
+    const colorHex = FOG_COLORS[timeOfDay.phase] || FOG_COLORS.day;
+    targetColor.current.set(colorHex);
+  }, [timeOfDay.phase]);
+
+  useEffect(() => {
+    scene.fog = new THREE.Fog(FOG_COLORS.day, near, far);
+    return () => { scene.fog = null; };
+  }, [scene, near, far]);
 
   useFrame(() => {
-    // Smooth lerp
-    currentColor.current.lerp(targetColor.current, 0.02);
-
-    if (!scene.fog) {
-      scene.fog = new THREE.Fog(currentColor.current, near, far);
-    } else {
-      (scene.fog as THREE.Fog).color.copy(currentColor.current);
-      (scene.fog as THREE.Fog).near = near;
-      (scene.fog as THREE.Fog).far = far;
+    if (scene.fog instanceof THREE.Fog) {
+      scene.fog.color.lerp(targetColor.current, 0.02);
     }
   });
 
@@ -1527,22 +1327,28 @@ export function DynamicFog({ timezone, near, far }: DynamicFogProps) {
 
 ```bash
 git add src/components/world3d/DynamicFog.tsx
-git commit -m "feat(world3d): add DynamicFog with time-of-day color transitions"
+git commit -m "feat(3d): add DynamicFog with time-of-day color transitions"
 ```
 
 ---
 
-## Chunk 5: Integration – WorldScene + GroundSystem Wiring
+## Chunk 5: Integration + Cleanup
 
-### Task 12: Update GroundSystem to accept water and parks
+### Task 11: Update GroundSystem
 
 **Files:**
 - Modify: `src/components/world3d/ground/GroundSystem.tsx`
+- Modify: `src/components/world3d/ground/index.ts`
 
-- [ ] **Step 1: Update GroundSystem.tsx**
+- [ ] **Step 1: Update GroundSystem props and children**
 
-Replace contents of `src/components/world3d/ground/GroundSystem.tsx`:
+In `src/components/world3d/ground/GroundSystem.tsx`:
+- Add imports: `WaterBodies` from `./WaterBodies`, `Parks` from `./Parks`
+- Add types: `WaterFeature`, `ParkFeature` from `../../../types/world3d`
+- Update `GroundSystemProps`: add `water: WaterFeature[]`, `parks: ParkFeature[]`
+- Add `<WaterBodies water={water} />` and `<Parks parks={parks} />` as children
 
+Updated component:
 ```tsx
 import { useQuality } from '../../../hooks/useQuality';
 import { GroundPlane } from './GroundPlane';
@@ -1573,247 +1379,112 @@ export function GroundSystem({ roads, water, parks }: GroundSystemProps) {
 }
 ```
 
-- [ ] **Step 2: Commit**
+- [ ] **Step 2: Update ground/index.ts exports**
 
-```bash
-git add src/components/world3d/ground/GroundSystem.tsx
-git commit -m "feat(world3d): wire water and parks into GroundSystem"
+Add exports for `WaterBodies` and `Parks`:
+```typescript
+export { GroundSystem } from './GroundSystem';
+export { GroundPlane } from './GroundPlane';
+export { GroundGrid } from './GroundGrid';
+export { RoadNetwork } from './RoadNetwork';
+export { WaterBodies } from './WaterBodies';
+export { Parks } from './Parks';
 ```
 
-### Task 13: Update WorldScene to use useCityTiles and DynamicFog
+- [ ] **Step 3: Commit**
+
+```bash
+git add src/components/world3d/ground/GroundSystem.tsx src/components/world3d/ground/index.ts
+git commit -m "feat(3d): update GroundSystem with water and parks layers"
+```
+
+### Task 12: WorldScene integration
 
 **Files:**
 - Modify: `src/components/world3d/WorldScene.tsx`
+- Modify: `src/components/world3d/index.ts`
 
-- [ ] **Step 1: Rewrite WorldScene.tsx**
+- [ ] **Step 1: Update WorldScene.tsx**
 
-Replace contents of `src/components/world3d/WorldScene.tsx`:
+Key changes:
+1. Replace `import { useRoadNetwork }` with `import { useCityTiles }`
+2. Replace `const { roads } = useRoadNetwork(...)` with `const { roads, water, parks, buildings } = useCityTiles(activeCamera.lat, activeCamera.lng, 16)`
+3. Add `import { DynamicFog } from './DynamicFog'`
+4. Replace static `<fog attach="fog" args={[...]} />` with `<DynamicFog timezone={timezone} near={quality.fog.near} far={quality.fog.far} />`
+5. Update `<GroundSystem roads={roads} />` to `<GroundSystem roads={roads} water={water} parks={parks} />`
+6. Update `<BuildingsLayer tilesUrl={...} ... />` to `<BuildingsLayer buildings={buildings} />`
+7. Remove `tilesUrl` from `WorldSceneProps` interface
 
-```tsx
-import { Suspense, useState, useCallback, useRef } from 'react';
-import { Canvas } from '@react-three/fiber';
-import { Stats } from '@react-three/drei';
-import type { Camera3D, QualityConfig } from '../../types/world3d';
-import { DEFAULT_QUALITY, geoToLocal } from '../../types/world3d';
-import { BuildingsLayer } from './BuildingsLayer';
-import { CameraMarker3D } from './CameraMarker3D';
-import { CameraFrustum } from './CameraFrustum';
-import { SkySystem } from './sky';
-import { GroundSystem } from './ground';
-import { LightingSystem } from './lighting';
-import { PostStack } from './post';
-import { DynamicFog } from './DynamicFog';
-import { QualityContext } from '../../hooks/useQuality';
-import { useCityTiles } from '../../hooks/useCityTiles';
-import { NavigationControls } from './NavigationControls';
+- [ ] **Step 2: Update world3d/index.ts exports**
 
-interface WorldSceneProps {
-  /** Активная камера (та что пользователь смотрит) */
-  activeCamera: Camera3D;
-  /** Список соседних камер (для маркеров) */
-  nearbyCameras: Camera3D[];
-  /** Колбэк при клике на маркер соседней камеры */
-  onCameraSelect: (camera: Camera3D) => void;
-  /** Часовой пояс для освещения (день/ночь) */
-  timezone?: string;
-  /** Настройки качества */
-  quality?: QualityConfig;
-  /** Показывать ли FPS-счётчик (dev mode) */
-  showStats?: boolean;
-}
+Add `export { DynamicFog } from './DynamicFog';`
 
-/**
- * WorldScene — корневой компонент 3D-мира Placebo.
- *
- * Рендерит:
- * - Реальные дороги, воду, парки, здания из OSM (через tile API)
- * - Видеопоток активной камеры на плоскости
- * - Маркеры соседних камер
- * - Wireframe-эффект для зданий
- * - Освещение (день/ночь по timezone)
- */
-export function WorldScene({
-  activeCamera,
-  nearbyCameras,
-  onCameraSelect,
-  timezone = 'UTC',
-  quality = DEFAULT_QUALITY,
-  showStats = false,
-}: WorldSceneProps) {
-  const [isExploring, setIsExploring] = useState(false);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-
-  const handleExplorationStart = useCallback(() => {
-    setIsExploring(true);
-  }, []);
-
-  const { roads, water, parks, buildings } = useCityTiles(
-    activeCamera.lat, activeCamera.lng, 16
-  );
-
-  return (
-    <Canvas
-      ref={canvasRef}
-      camera={{
-        fov: 75,
-        near: 0.1,
-        far: 5000,
-        position: [0, activeCamera.heightAboveGround, 0],
-      }}
-      gl={{
-        antialias: true,
-        alpha: false,
-        powerPreference: 'high-performance',
-        stencil: quality.post.mode !== 'none',
-      }}
-      dpr={[1, 2]}
-      style={{
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        width: '100%',
-        height: '100%',
-        background: '#0a0a0f',
-      }}
-    >
-      <QualityContext.Provider value={quality}>
-        {showStats && <Stats />}
-
-        <SkySystem timezone={timezone} />
-        <LightingSystem timezone={timezone} roads={roads} />
-        <DynamicFog timezone={timezone} near={quality.fog.near} far={quality.fog.far} />
-
-        <Suspense fallback={null}>
-          <GroundSystem roads={roads} water={water} parks={parks} />
-
-          <BuildingsLayer buildings={buildings} />
-
-          <CameraFrustum camera={activeCamera} showVideo={true} />
-
-          {nearbyCameras
-            .filter((cam) => cam.id !== activeCamera.id)
-            .map((cam) => (
-              <CameraMarker3D
-                key={cam.id}
-                camera={cam}
-                centerCamera={activeCamera}
-                onClick={() => onCameraSelect(cam)}
-              />
-            ))}
-
-          {nearbyCameras
-            .filter((cam) => cam.id !== activeCamera.id && cam.hlsUrl)
-            .slice(0, quality.maxVideoTextures - 1)
-            .map((cam) => {
-              const { x, z } = geoToLocal(cam.lat, cam.lng, activeCamera.lat, activeCamera.lng);
-              return (
-                <group key={`frustum-${cam.id}`} position={[x, cam.heightAboveGround, z]}>
-                  <CameraFrustum camera={cam} showVideo={true} frustumDepth={60} />
-                </group>
-              );
-            })}
-        </Suspense>
-
-        <PostStack />
-
-        <NavigationControls
-          onExplorationStart={handleExplorationStart}
-          isExploring={isExploring}
-        />
-      </QualityContext.Provider>
-    </Canvas>
-  );
-}
-```
-
-Note: removed `tilesUrl` prop (no longer needed – BuildingsLayer uses footprints from tiles).
-
-- [ ] **Step 2: Update World3DScreen.tsx – remove tilesUrl prop**
-
-In `src/screens/World3DScreen.tsx`, remove the `tilesUrl=""` prop from `<WorldScene />`:
-
-Change:
-```tsx
-<WorldScene
-  activeCamera={activeCamera}
-  nearbyCameras={cameras}
-  onCameraSelect={handleCameraSelect}
-  timezone="Asia/Tokyo"
-  tilesUrl="" // Пока нет 3D Tiles, BuildingsLayer рисует mock здания
-  showStats={true}
-/>
-```
-
-To:
-```tsx
-<WorldScene
-  activeCamera={activeCamera}
-  nearbyCameras={cameras}
-  onCameraSelect={handleCameraSelect}
-  timezone="Asia/Tokyo"
-  showStats={true}
-/>
-```
-
-- [ ] **Step 3: Delete useRoadNetwork.ts (now safe – all imports updated)**
-
-Run: `rm src/hooks/useRoadNetwork.ts`
-
-- [ ] **Step 4: Verify frontend compiles**
-
-Run: `cd /Users/notebook/Placebo && npx tsc --noEmit`
-Expected: No type errors.
-
-- [ ] **Step 5: Commit**
+- [ ] **Step 3: Verify TypeScript compiles**
 
 ```bash
-git add src/components/world3d/WorldScene.tsx src/components/world3d/DynamicFog.tsx src/screens/World3DScreen.tsx
-git rm src/hooks/useRoadNetwork.ts
-git commit -m "feat(world3d): integrate useCityTiles, DynamicFog, remove tilesUrl prop"
+npx tsc --noEmit
 ```
 
-### Task 14: End-to-end verification
+- [ ] **Step 4: Commit**
 
-- [ ] **Step 1: Start the API server**
-
-Run:
 ```bash
-cd /Users/notebook/Placebo && cargo run -p placebo-api &
+git add src/components/world3d/WorldScene.tsx src/components/world3d/index.ts
+git commit -m "feat(3d): integrate useCityTiles, DynamicFog, and real buildings into WorldScene"
 ```
 
-- [ ] **Step 2: Start the frontend dev server**
+### Task 13: Delete useRoadNetwork
 
-Run:
+**Files:**
+- Delete: `src/hooks/useRoadNetwork.ts`
+
+- [ ] **Step 1: Verify no remaining imports**
+
 ```bash
-cd /Users/notebook/Placebo && VITE_API_URL=http://localhost:3000 npm run dev
+grep -r "useRoadNetwork" src/
 ```
+Expected: zero results
 
-- [ ] **Step 3: Verify in browser**
+- [ ] **Step 2: Delete the file**
 
-Open `http://localhost:1420`. Check:
-1. Roads appear as white ribbons on the ground
-2. Water bodies appear as dark blue areas
-3. Parks appear as dark green areas
-4. Buildings appear as wireframe glass extrusions with real heights
-5. Camera frustums still show video
-6. Fog color transitions smoothly
-
-- [ ] **Step 4: Check browser console for errors**
-
-Open DevTools → Console. Expected: no fetch errors, no Three.js warnings.
-
-- [ ] **Step 5: Verify tile API performance**
-
-Run:
 ```bash
-curl -w "\nTime: %{time_total}s\n" -s "http://localhost:3000/api/v1/world/tile?z=16&x=57483&y=25953&center_lat=35.6595&center_lng=139.7004" -o /dev/null
+rm src/hooks/useRoadNetwork.ts
 ```
 
-Expected: < 200ms first request, < 10ms cached.
+- [ ] **Step 3: Final TypeScript check**
 
-- [ ] **Step 6: Final commit with any remaining fixes**
+```bash
+npx tsc --noEmit
+```
+
+- [ ] **Step 4: Commit**
 
 ```bash
 git add -A
-git commit -m "feat: complete OSM tile pipeline integration"
+git commit -m "chore: remove useRoadNetwork (replaced by useCityTiles)"
 ```
+
+---
+
+## Verification
+
+### End-to-end test sequence
+
+1. **SQL views**: `psql -d placebo -c "SELECT count(*) FROM roads_view;"` – should return rows
+2. **Rust build**: `cargo build -p placebo-api` – compiles clean
+3. **Rust tests**: `cargo test -p placebo-api` – all pass
+4. **API server**: `cargo run -p placebo-api` (needs PostGIS + Redis running)
+5. **Tile endpoint**: `curl "http://localhost:3000/api/v1/world/tile?z=16&x=57483&y=25953&center_lat=35.6595&center_lng=139.7004" | jq '.roads | length'`
+6. **Frontend build**: `npx tsc --noEmit` – compiles clean
+7. **Visual test**: `npm run dev` → open 3D world → see roads, water, parks, wireframe buildings
+
+### What to look for visually
+- Roads: dark translucent ribbons on the ground (same as before but from real API data)
+- Water: blue translucent shapes (lakes) and ribbons (rivers) at y=0.02
+- Parks: green translucent polygons at y=0.01
+- Buildings: glass wireframe extrusions with real footprints and heights
+- Fog: color transitions smoothly between time-of-day phases
+
+### Known limitations
+- `mergeGeometries` for 2600+ buildings may use significant memory – monitor FPS
+- `ST_Area(way::geography) > 10` in buildings_tile_view is computed per query (not materialized) – if slow, consider materializing
+- No client-side tile caching – every camera switch re-fetches tiles

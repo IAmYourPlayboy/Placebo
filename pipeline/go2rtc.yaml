@@ -12,21 +12,22 @@
 #   3. Заменить VIDEO_ID ниже на реальный ID
 
 streams:
+  # yt-dlp outputs YouTube HLS URL → go2rtc reads it directly (no ffmpeg)
   # Shibuya Scramble Crossing — Live Cam (cam 1)
   shibuya-crossing:
-    - "exec:/scripts/youtube-stream.sh https://www.youtube.com/watch?v=dfVK7ld38Ys"
+    - "echo:yt-dlp -f 'best[vcodec^=avc1]' --no-warnings -g https://www.youtube.com/watch?v=dfVK7ld38Ys"
 
-  # Shibuya Scramble Crossing — Live Camera (cam 2)
+  # Shibuya — Live Camera (cam 2)
   shibuya-station:
-    - "exec:/scripts/youtube-stream.sh https://www.youtube.com/watch?v=8H3nRCFVR6Y"
+    - "echo:yt-dlp -f 'best[vcodec^=avc1]' --no-warnings -g https://www.youtube.com/watch?v=DjdUEyjx8GM"
 
   # Tokyo cam 3
   hachiko-square:
-    - "exec:/scripts/youtube-stream.sh https://www.youtube.com/watch?v=ehJbjfH1dIo"
+    - "echo:yt-dlp -f 'best[vcodec^=avc1]' --no-warnings -g https://www.youtube.com/watch?v=ehJbjfH1dIo"
 
   # Tokyo Shinjuku
   center-gai:
-    - "exec:/scripts/youtube-stream.sh https://www.youtube.com/watch?v=6dp-bvQ7RWo"
+    - "echo:yt-dlp -f 'best[vcodec^=avc1]' --no-warnings -g https://www.youtube.com/watch?v=6dp-bvQ7RWo"
 
 # WebRTC / API settings
 api:
@@ -36,4 +37,4 @@ webrtc:
   listen: ":8555"
 
 log:
-  level: info
+  level: debug

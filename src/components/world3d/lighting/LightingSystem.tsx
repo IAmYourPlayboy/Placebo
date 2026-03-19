@@ -1,6 +1,6 @@
 import { BasicLights } from './BasicLights';
 import { NightLights } from './NightLights';
-import type { RoadSegment } from '../../../hooks/useRoadNetwork';
+import type { RoadSegment } from '../../../types/world3d';
 
 interface LightingSystemProps {
   timezone?: string;

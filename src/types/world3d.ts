@@ -177,3 +177,36 @@ export function geoDistance(
     Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) ** 2;
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
+
+// ─── City Tile Types ────────────────────────────────────────
+
+export interface RoadSegment {
+  points: { x: number; z: number }[];
+  highway: string;
+  name: string | null;
+  width: number;
+}
+
+export const DEFAULT_ROAD_WIDTHS: Record<string, number> = {
+  motorway: 15, trunk: 14, primary: 12, secondary: 9,
+  tertiary: 7, residential: 6, unclassified: 5, service: 4,
+  footway: 2, cycleway: 2, pedestrian: 3, path: 1.5, steps: 1.5,
+};
+
+export interface WaterFeature {
+  points: { x: number; z: number }[];
+  type: string;
+  geomType: 'polygon' | 'line';
+  name: string | null;
+}
+
+export interface ParkFeature {
+  points: { x: number; z: number }[];
+  type: string;
+  name: string | null;
+}
+
+export interface BuildingFootprint {
+  outline: { x: number; z: number }[];
+  height: number;
+}
