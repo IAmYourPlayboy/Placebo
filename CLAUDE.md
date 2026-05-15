@@ -118,6 +118,17 @@ d:\Projects\Placebo\
 - FFmpeg медиасервер (RTSP → HLS).
 - FriendsScreen, ElevenLabs перевод речи.
 
+### Milestones (alpha roadmap)
+
+- [x] **M0 Foundation** (2026-05-15): ts-rs pipeline, react-i18next, ThemeProvider, user_preferences IPC, dead-code cleanup.
+- [ ] M1 Shell (sidebar + tabs + per-tab router + breadcrumbs).
+- [ ] M2 Auth (welcome / register / login).
+- [ ] M3 Cameras seed + HLS proxy.
+- [ ] M4 Home + Categories + World3D in shell.
+- [ ] M5 Rooms + WebSocket + chat.
+- [ ] M6 Profile + Friends + Settings + Create hub.
+- [ ] M7 Polish + acceptance + distribution.
+
 ---
 
 ## 5. Дизайн-система
@@ -320,9 +331,6 @@ Pipeline bash-скрипты на Windows запускать через Git Bash
 
 ## 16. Известные проблемы / заметки
 
-- `main.rs` – дубликат `fn main` (legacy + новый), почистить.
-- Legacy-команды в `lib.rs` (`greet`, `get_public_rooms`, `create_room`) – убрать когда будет API.
-- `BottomNav` скрыт CSS – можно удалить.
 - `3d-tiles-renderer` загрузчик закомментирован в `BuildingsLayer.tsx` до `npm install`.
 - HLS-видеотекстура закомментирована в `CameraFrustum.tsx` – живая часть идёт через hls.js proxy.
 - Белые плоскости вместо видео = запросы на go2rtc. Убрать `VITE_GO2RTC_URL` из `.env` и `launch.json`.
