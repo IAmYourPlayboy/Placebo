@@ -1139,3 +1139,31 @@ button:active { opacity: .75; }
   font-family: 'Nunito', sans-serif;
   font-size: 15px;
 }
+
+/* ═══════════════════════ EMPTY SECTION ═══════════════════════ */
+.empty-section {
+  padding: 48px 32px;
+  color: var(--t2);
+  text-align: center;
+}
+.empty-section__title { font-size: 18px; font-weight: 600; color: var(--t1); margin-bottom: 8px; }
+.empty-section__hint { font-size: 14px; color: var(--t3); }
+
+/* ═══════════════════════ SETTINGS ═══════════════════════ */
+.settings { padding: 24px 32px; max-width: 720px; }
+.settings h1 { font-size: 24px; margin-bottom: 24px; }
+.settings__group { margin-bottom: 32px; }
+.settings__group h2 { font-size: 14px; color: var(--t3); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 12px; }
+.settings__row { display: flex; gap: 8px; flex-wrap: wrap; }
+.settings__chip {
+  padding: 8px 16px; border-radius: 999px;
+  border: 1px solid var(--border); background: var(--bg);
+  color: var(--t1); cursor: pointer; font-size: 14px;
+}
+.settings__chip--active { background: var(--t1); color: var(--bg); border-color: var(--t1); }
+.settings__danger {
+  padding: 10px 20px; border-radius: 10px;
+  border: 1px solid var(--border); background: var(--bg);
+  color: var(--t3); cursor: not-allowed; font-size: 14px;
+}
+.settings__hint { font-size: 13px; color: var(--t3); margin-top: 8px; }
