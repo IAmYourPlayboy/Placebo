@@ -1312,3 +1312,9 @@ button:active { opacity: .75; }
 .shell-breadcrumbs__crumb button:hover { color: var(--t1); }
 .shell-breadcrumbs__leaf { color: var(--t1); font-weight: 600; }
 .shell-breadcrumbs__sep { color: var(--t3); }
+
+/* ═══════════════════════ SHELL: GLOBAL CANVAS (3D) ═══════════════════════ */
+.global-canvas {
+  position: absolute; inset: 0;
+  pointer-events: none; /* The scene component enables events as needed */
+}
