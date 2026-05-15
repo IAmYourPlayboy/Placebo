@@ -1296,3 +1296,19 @@ button:active { opacity: .75; }
   border-color: var(--border); border-bottom-color: var(--bg);
 }
 .shell-tab--active .shell-tab__close { opacity: 1; }
+
+/* ═══════════════════════ SHELL: BREADCRUMBS ═══════════════════════ */
+.shell-breadcrumbs {
+  grid-area: breadcrumbs;
+  padding: 8px 32px; color: var(--t3); font-size: 13px;
+  display: flex; align-items: center; gap: 4px;
+  background: var(--bg); border-bottom: 1px solid var(--border);
+}
+.shell-breadcrumbs__crumb { display: inline-flex; align-items: center; gap: 6px; }
+.shell-breadcrumbs__crumb button {
+  background: transparent; border: 0; color: var(--t3); cursor: pointer;
+  padding: 0; font-size: 13px;
+}
+.shell-breadcrumbs__crumb button:hover { color: var(--t1); }
+.shell-breadcrumbs__leaf { color: var(--t1); font-weight: 600; }
+.shell-breadcrumbs__sep { color: var(--t3); }
