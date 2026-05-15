@@ -6,10 +6,19 @@ import FriendsScreen from "./screens/FriendsScreen";
 import ProfileScreen from "./screens/ProfileScreen";
 import WatchRoomScreen from "./screens/WatchRoomScreen";
 import World3DScreen from "./screens/World3DScreen";
+import { ThemeProvider } from "./theme";
 
 export type Screen = "home" | "explore" | "create" | "friends" | "profile";
 
 export default function App() {
+  return (
+    <ThemeProvider>
+      <AppInner />
+    </ThemeProvider>
+  );
+}
+
+function AppInner() {
   const [screen, setScreen] = useState<Screen>("home");
   const [inRoom, setInRoom] = useState(false);
   const [in3DWorld, setIn3DWorld] = useState(false);
