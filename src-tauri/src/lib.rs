@@ -43,6 +43,9 @@ pub fn run() {
             commands::camera::get_camera_categories,
             commands::camera::get_cameras_count,
             commands::camera::seed_cameras,
+            commands::preferences::prefs_get,
+            commands::preferences::prefs_set,
+            commands::preferences::prefs_all,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

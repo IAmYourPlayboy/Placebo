@@ -1,16 +1,9 @@
+@import "./theme/variables.css";
 @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800;900&display=swap');
 
-/* ═══════════════════════ TOKENS ═══════════════════════ */
+/* ═══════════════════════ TOKENS (non-theme) ═══════════════════════ */
 :root {
-  --bg:        #FFFFFF;
-  --bg-2:      #F5F5F7;
-  --bg-3:      #EBEBEB;
-  --accent:    #E8345A;
   --accent-lt: #FFF0F3;
-  --t1:        #0F0F0F;
-  --t2:        #444444;
-  --t3:        #999999;
-  --border:    #EBEBEB;
   --shadow-sm: 0 1px 4px rgba(0,0,0,.06);
   --shadow-md: 0 4px 16px rgba(0,0,0,.10);
   --r-sm:   8px;

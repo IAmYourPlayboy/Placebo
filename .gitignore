@@ -48,3 +48,8 @@ pipeline/pbf/*.osm
 
 # Tauri build
 src-tauri/target/
+
+# ts-rs auto-generated bindings
+crates/placebo-shared/bindings/
+src/types/api/*
+!src/types/api/README.md

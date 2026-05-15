@@ -1,4 +1,5 @@
 pub mod camera;
+pub mod preferences;
 pub mod recording;
 pub mod seed;
 

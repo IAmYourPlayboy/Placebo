@@ -1,3 +1,6 @@
+#[cfg(feature = "export-types")]
+pub mod codegen;
+
 pub mod auth;
 pub mod camera;
 pub mod error;

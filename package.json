@@ -7,7 +7,11 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "gen-types": "bash scripts/gen-types.sh",
+    "gen-types:win": "powershell -ExecutionPolicy Bypass -File scripts/gen-types.ps1",
+    "predev": "bash scripts/gen-types.sh",
+    "prebuild": "bash scripts/gen-types.sh"
   },
   "dependencies": {
     "@react-three/drei": "^9.122.0",
@@ -16,9 +20,12 @@
     "@tauri-apps/api": "^2.0.0",
     "@tauri-apps/plugin-opener": "^2.0.0",
     "hls.js": "^1.6.15",
+    "i18next": "^24.2.3",
+    "i18next-browser-languagedetector": "^8.2.1",
     "postprocessing": "^6.38.3",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-i18next": "^15.7.4",
     "three": "^0.183.2"
   },
   "devDependencies": {

@@ -1,0 +1,68 @@
+/*
+ * Placebo theme variables.
+ * Two themes: light and dark. "auto" is runtime-selected via
+ * prefers-color-scheme and resolves to one of the two below.
+ */
+
+:root[data-theme="light"] {
+  /* Brand */
+  --accent: #E8345A;
+  --accent-hover: #D12850;
+
+  /* Surfaces */
+  --bg:    #FFFFFF;
+  --bg-2:  #F5F5F7;
+  --bg-3:  #EBEBEB;
+
+  /* Text */
+  --t1: #0F0F0F;
+  --t2: #444444;
+  --t3: #999999;
+
+  /* Borders and dividers */
+  --border: #E8E8EC;
+
+  /* Shell metrics */
+  --sidebar-w: 224px;
+  --topbar-h: 56px;
+  --tabbar-h: 36px;
+
+  /* 3D scene */
+  --scene-bg: #0a0a0f;
+  --scene-fog: #0a0a1a;
+  --wire-edge: #1e2332;
+  --wire-fill: #0f121c;
+
+  /* Category marker palette */
+  --cat-city:    #E8345A;
+  --cat-traffic: #FF9500;
+  --cat-nature:  #34C759;
+}
+
+:root[data-theme="dark"] {
+  --accent: #FF4A6B;
+  --accent-hover: #E8345A;
+
+  --bg:    #0F0F10;
+  --bg-2:  #1A1A1C;
+  --bg-3:  #262628;
+
+  --t1: #F5F5F7;
+  --t2: #BEBEC2;
+  --t3: #78787C;
+
+  --border: #2A2A2E;
+
+  --sidebar-w: 224px;
+  --topbar-h: 56px;
+  --tabbar-h: 36px;
+
+  --scene-bg: #000006;
+  --scene-fog: #050511;
+  --wire-edge: #3A4058;
+  --wire-fill: #1A1D2B;
+
+  --cat-city:    #FF4A6B;
+  --cat-traffic: #FFAA33;
+  --cat-nature:  #4ED87A;
+}
