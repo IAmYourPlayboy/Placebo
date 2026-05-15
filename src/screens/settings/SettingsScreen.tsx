@@ -3,10 +3,12 @@ import { useTheme } from "../../theme/useTheme";
 import type { ThemeChoice } from "../../theme";
 
 const CHOICES: ThemeChoice[] = ["light", "auto", "dark"];
+const LANGS = ["ru", "en"] as const;
 
 export default function SettingsScreen() {
   const { t, i18n } = useTranslation();
   const { choice, setChoice } = useTheme();
+  const currentLang = i18n.resolvedLanguage ?? i18n.language ?? "";
 
   return (
     <div className="settings">
@@ -15,30 +17,38 @@ export default function SettingsScreen() {
       <section className="settings__group">
         <h2>{t("settings.theme.title")}</h2>
         <div className="settings__row">
-          {CHOICES.map((c) => (
-            <button
-              key={c}
-              className={"settings__chip" + (choice === c ? " settings__chip--active" : "")}
-              onClick={() => setChoice(c)}
-            >
-              {t(`settings.theme.${c}`)}
-            </button>
-          ))}
+          {CHOICES.map((c) => {
+            const active = choice === c;
+            return (
+              <button
+                key={c}
+                className={"settings__chip" + (active ? " settings__chip--active" : "")}
+                onClick={() => setChoice(c)}
+                aria-pressed={active}
+              >
+                {t(`settings.theme.${c}`)}
+              </button>
+            );
+          })}
         </div>
       </section>
 
       <section className="settings__group">
         <h2>{t("settings.language.title")}</h2>
         <div className="settings__row">
-          {["ru", "en"].map((lng) => (
-            <button
-              key={lng}
-              className={"settings__chip" + (i18n.resolvedLanguage === lng ? " settings__chip--active" : "")}
-              onClick={() => i18n.changeLanguage(lng)}
-            >
-              {t(`settings.language.${lng}`)}
-            </button>
-          ))}
+          {LANGS.map((lng) => {
+            const active = currentLang === lng || currentLang.startsWith(`${lng}-`);
+            return (
+              <button
+                key={lng}
+                className={"settings__chip" + (active ? " settings__chip--active" : "")}
+                onClick={() => i18n.changeLanguage(lng)}
+                aria-pressed={active}
+              >
+                {t(`settings.language.${lng}`)}
+              </button>
+            );
+          })}
         </div>
       </section>
 

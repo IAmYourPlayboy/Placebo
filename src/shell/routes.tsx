@@ -27,6 +27,9 @@ export const routes: RouteObject[] = [
   { path: "/settings", element: <SettingsScreen /> },
   { path: "/profile", element: <ProfilePlaceholder /> },
   { path: "/profile/:username", element: <ProfilePlaceholder /> },
+  // TODO(M5/M4): WatchRoomScreen и World3DScreen ждут onBack. window.history.back()
+  // дёргает историю Tauri webview, а не per-tab MemoryRouter, поэтому в рамках shell
+  // это no-op. Эти экраны переписываются в M4/M5 на useNavigate(-1) – тогда проп уйдёт.
   { path: "/room/:id", element: <WatchRoomScreen onBack={() => window.history.back()} /> },
   { path: "/world", element: <World3DScreen onBack={() => window.history.back()} /> },
   { path: "*", element: <Navigate to="/home" replace /> },
