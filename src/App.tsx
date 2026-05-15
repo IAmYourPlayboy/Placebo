@@ -1,5 +1,4 @@
 import { useState } from "react";
-import BottomNav from "./components/BottomNav";
 import HomeScreen from "./screens/HomeScreen";
 import ExploreScreen from "./screens/ExploreScreen";
 import CreateScreen from "./screens/CreateScreen";
@@ -41,7 +40,6 @@ export default function App() {
       <div className="app-content" key={screen}>
         {screens[screen]}
       </div>
-      <BottomNav active={screen} onChange={setScreen} />
     </div>
   );
 }
