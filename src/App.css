@@ -1318,3 +1318,16 @@ button:active { opacity: .75; }
   position: absolute; inset: 0;
   pointer-events: none; /* The scene component enables events as needed */
 }
+
+/* ═══════════════════════ SHELL: TAB CONTENT ═══════════════════════ */
+.shell-content {
+  grid-area: content;
+  position: relative;
+  overflow: hidden;
+  background: var(--bg);
+}
+.shell-content__tab {
+  position: absolute; inset: 0;
+  overflow: auto;
+}
+.shell-content__tab[hidden] { display: none !important; }
