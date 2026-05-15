@@ -1252,3 +1252,47 @@ button:active { opacity: .75; }
   background: var(--bg); color: var(--t1);
   box-shadow: 0 1px 3px rgba(0,0,0,0.08);
 }
+
+/* ═══════════════════════ SHELL: TABBAR ═══════════════════════ */
+.shell-tabbar {
+  grid-area: tabbar;
+  height: var(--tabbar-h);
+  display: flex; align-items: flex-end; gap: 2px;
+  padding: 4px 12px 0; background: var(--bg-2);
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto; overflow-y: hidden;
+}
+.shell-tabbar__new {
+  width: 28px; height: 28px; border-radius: 6px;
+  background: transparent; border: 0; color: var(--t2);
+  cursor: pointer; display: grid; place-items: center;
+  margin-bottom: 2px; flex: 0 0 auto;
+}
+.shell-tabbar__new:hover { background: var(--bg-3); color: var(--t1); }
+
+.shell-tab {
+  display: flex; align-items: center; gap: 8px;
+  max-width: 220px; padding: 0 10px;
+  height: calc(var(--tabbar-h) - 4px);
+  border: 1px solid transparent; border-radius: 8px 8px 0 0;
+  cursor: pointer; color: var(--t2);
+  flex: 0 0 auto;
+}
+.shell-tab__title {
+  flex: 1 1 auto; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap;
+  font-size: 13px;
+}
+.shell-tab__close {
+  flex: 0 0 auto; width: 20px; height: 20px;
+  border: 0; border-radius: 4px;
+  background: transparent; color: var(--t3); cursor: pointer;
+  display: grid; place-items: center; opacity: 0;
+}
+.shell-tab:hover { background: var(--bg-2); color: var(--t1); }
+.shell-tab:hover .shell-tab__close { opacity: 1; }
+.shell-tab--active {
+  background: var(--bg); color: var(--t1);
+  border-color: var(--border); border-bottom-color: var(--bg);
+}
+.shell-tab--active .shell-tab__close { opacity: 1; }
