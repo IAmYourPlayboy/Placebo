@@ -1,6 +1,7 @@
 import { createContext, useEffect, useMemo, useState, ReactNode } from "react";
 import type { ThemeChoice, ResolvedTheme } from "./index";
 import { DEFAULT_THEME, THEME_STORAGE_KEY } from "./index";
+import { prefsGet, prefsSet } from "../services/preferences";
 
 type ThemeContextValue = {
   choice: ThemeChoice;
@@ -19,16 +20,27 @@ function resolveChoice(choice: ThemeChoice): ResolvedTheme {
   return choice;
 }
 
-function loadChoice(): ThemeChoice {
-  if (typeof window === "undefined") return DEFAULT_THEME;
-  const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
-  if (stored === "light" || stored === "dark" || stored === "auto") return stored;
+async function loadChoice(): Promise<ThemeChoice> {
+  try {
+    const v = await prefsGet("theme");
+    if (v === "light" || v === "dark" || v === "auto") return v;
+  } catch {
+    /* not running in Tauri; fall back to localStorage below */
+  }
+  if (typeof window !== "undefined") {
+    const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
+    if (stored === "light" || stored === "dark" || stored === "auto") return stored;
+  }
   return DEFAULT_THEME;
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [choice, setChoiceState] = useState<ThemeChoice>(() => loadChoice());
-  const [resolved, setResolved] = useState<ResolvedTheme>(() => resolveChoice(choice));
+  const [choice, setChoiceState] = useState<ThemeChoice>(DEFAULT_THEME);
+  const [resolved, setResolved] = useState<ResolvedTheme>(() => resolveChoice(DEFAULT_THEME));
+
+  useEffect(() => {
+    loadChoice().then((c) => setChoiceState(c));
+  }, []);
 
   useEffect(() => {
     setResolved(resolveChoice(choice));
@@ -50,7 +62,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   const setChoice = (c: ThemeChoice) => {
     setChoiceState(c);
-    window.localStorage.setItem(THEME_STORAGE_KEY, c);
+    prefsSet("theme", c).catch(() => {
+      if (typeof window !== "undefined") window.localStorage.setItem(THEME_STORAGE_KEY, c);
+    });
   };
 
   const value = useMemo(() => ({ choice, resolved, setChoice }), [choice, resolved]);
