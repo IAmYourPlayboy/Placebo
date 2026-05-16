@@ -121,7 +121,7 @@ d:\Projects\Placebo\
 ### Milestones (alpha roadmap)
 
 - [x] **M0 Foundation** (2026-05-15): ts-rs pipeline, react-i18next, ThemeProvider, user_preferences IPC, dead-code cleanup.
-- [ ] M1 Shell (sidebar + tabs + per-tab router + breadcrumbs).
+- [x] **M1 Shell** (2026-05-16): sidebar, topbar, per-tab memory router, breadcrumbs, theme toggle, skeleton screens, tab persistence.
 - [ ] M2 Auth (welcome / register / login).
 - [ ] M3 Cameras seed + HLS proxy.
 - [ ] M4 Home + Categories + World3D in shell.
