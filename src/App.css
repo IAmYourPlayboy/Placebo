@@ -1139,3 +1139,210 @@ button:active { opacity: .75; }
   font-family: 'Nunito', sans-serif;
   font-size: 15px;
 }
+
+/* ═══════════════════════ EMPTY SECTION ═══════════════════════ */
+.empty-section {
+  padding: 48px 32px;
+  color: var(--t2);
+  text-align: center;
+}
+.empty-section__title { font-size: 18px; font-weight: 600; color: var(--t1); margin-bottom: 8px; }
+.empty-section__hint { font-size: 14px; color: var(--t3); }
+
+/* ═══════════════════════ SETTINGS ═══════════════════════ */
+.settings { padding: 24px 32px; max-width: 720px; }
+.settings h1 { font-size: 24px; margin-bottom: 24px; }
+.settings__group { margin-bottom: 32px; }
+.settings__group h2 { font-size: 14px; color: var(--t3); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 12px; }
+.settings__row { display: flex; gap: 8px; flex-wrap: wrap; }
+.settings__chip {
+  padding: 8px 16px; border-radius: 999px;
+  border: 1px solid var(--border); background: var(--bg);
+  color: var(--t1); cursor: pointer; font-size: 14px;
+}
+.settings__chip--active { background: var(--t1); color: var(--bg); border-color: var(--t1); }
+.settings__danger {
+  padding: 10px 20px; border-radius: 10px;
+  border: 1px solid var(--border); background: var(--bg);
+  color: var(--t3); cursor: not-allowed; font-size: 14px;
+}
+.settings__hint { font-size: 13px; color: var(--t3); margin-top: 8px; }
+
+/* ═══════════════════════ SHELL: SIDEBAR ═══════════════════════ */
+.shell-logo {
+  background: transparent; border: 0; cursor: pointer;
+  padding: 16px 24px; text-align: left;
+}
+.shell-logo__text {
+  font-family: "Nunito", sans-serif; font-weight: 800;
+  font-size: 28px; color: var(--t1);
+}
+
+.shell-sidebar {
+  grid-area: sidebar;
+  background: var(--bg); border-right: 1px solid var(--border);
+  display: flex; flex-direction: column;
+  padding: 8px 12px 16px; gap: 4px;
+  height: 100vh; overflow-y: auto;
+}
+.shell-sidebar__top,
+.shell-sidebar__main,
+.shell-sidebar__bottom,
+.shell-sidebar__footer { display: flex; flex-direction: column; gap: 2px; }
+.shell-sidebar__main { margin-top: 24px; }
+.shell-sidebar__bottom { margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border); }
+.shell-sidebar__footer { margin-top: auto; padding-top: 16px; border-top: 1px solid var(--border); }
+
+.sidebar-item {
+  display: flex; align-items: center; gap: 12px;
+  width: 100%; padding: 10px 20px;
+  background: transparent; border: 0; border-radius: 10px;
+  color: var(--t1); cursor: pointer; text-align: left;
+  font-size: 16px; line-height: 1.2;
+}
+.sidebar-item:hover { background: var(--bg-2); }
+.sidebar-item--active {
+  background: var(--bg-2);
+  /* Figma-style "bubble" outline for active item */
+  box-shadow: inset 0 0 0 1px var(--t1);
+}
+.sidebar-item--lg .sidebar-item__label { font-weight: 700; font-size: 18px; }
+.sidebar-item__icon { flex: 0 0 auto; color: var(--t1); }
+.sidebar-item__label { flex: 1 1 auto; }
+
+/* ═══════════════════════ SHELL: TOPBAR ═══════════════════════ */
+.shell-topbar {
+  grid-area: topbar;
+  height: var(--topbar-h);
+  display: flex; align-items: center; gap: 16px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+}
+.shell-topbar__search {
+  flex: 1 1 auto; display: flex; align-items: center; gap: 8px;
+  background: var(--bg-2); border: 1px solid var(--border);
+  border-radius: 10px; padding: 0 12px; height: 36px;
+  color: var(--t3);
+}
+.shell-topbar__search input {
+  flex: 1; background: transparent; border: 0; outline: none;
+  color: var(--t1); font-size: 14px;
+}
+.shell-topbar__search input:disabled { cursor: not-allowed; }
+
+.nav-buttons { display: flex; gap: 4px; }
+.nav-buttons button {
+  width: 32px; height: 32px; border-radius: 8px;
+  background: transparent; border: 0; color: var(--t2);
+  cursor: pointer; display: grid; place-items: center;
+}
+.nav-buttons button:hover { background: var(--bg-2); color: var(--t1); }
+
+.theme-toggle {
+  display: flex; gap: 2px;
+  background: var(--bg-2); padding: 2px; border-radius: 999px;
+}
+.theme-toggle__btn {
+  width: 32px; height: 28px; border-radius: 999px;
+  background: transparent; border: 0; color: var(--t2);
+  cursor: pointer; display: grid; place-items: center;
+}
+.theme-toggle__btn--active {
+  background: var(--bg); color: var(--t1);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+
+/* ═══════════════════════ SHELL: TABBAR ═══════════════════════ */
+.shell-tabbar {
+  grid-area: tabbar;
+  height: var(--tabbar-h);
+  display: flex; align-items: flex-end; gap: 2px;
+  padding: 4px 12px 0; background: var(--bg-2);
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto; overflow-y: hidden;
+}
+.shell-tabbar__new {
+  width: 28px; height: 28px; border-radius: 6px;
+  background: transparent; border: 0; color: var(--t2);
+  cursor: pointer; display: grid; place-items: center;
+  margin-bottom: 2px; flex: 0 0 auto;
+}
+.shell-tabbar__new:hover { background: var(--bg-3); color: var(--t1); }
+
+.shell-tab {
+  display: flex; align-items: center; gap: 8px;
+  max-width: 220px; padding: 0 10px;
+  height: calc(var(--tabbar-h) - 4px);
+  border: 1px solid transparent; border-radius: 8px 8px 0 0;
+  cursor: pointer; color: var(--t2);
+  flex: 0 0 auto;
+}
+.shell-tab__title {
+  flex: 1 1 auto; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap;
+  font-size: 13px;
+}
+.shell-tab__close {
+  flex: 0 0 auto; width: 20px; height: 20px;
+  border: 0; border-radius: 4px;
+  background: transparent; color: var(--t3); cursor: pointer;
+  display: grid; place-items: center; opacity: 0;
+}
+.shell-tab:hover { background: var(--bg-2); color: var(--t1); }
+.shell-tab:hover .shell-tab__close { opacity: 1; }
+.shell-tab--active {
+  background: var(--bg); color: var(--t1);
+  border-color: var(--border); border-bottom-color: var(--bg);
+}
+.shell-tab--active .shell-tab__close { opacity: 1; }
+
+/* ═══════════════════════ SHELL: BREADCRUMBS ═══════════════════════ */
+.shell-breadcrumbs {
+  grid-area: breadcrumbs;
+  padding: 8px 32px; color: var(--t3); font-size: 13px;
+  display: flex; align-items: center; gap: 4px;
+  background: var(--bg); border-bottom: 1px solid var(--border);
+}
+.shell-breadcrumbs__crumb { display: inline-flex; align-items: center; gap: 6px; }
+.shell-breadcrumbs__crumb button {
+  background: transparent; border: 0; color: var(--t3); cursor: pointer;
+  padding: 0; font-size: 13px;
+}
+.shell-breadcrumbs__crumb button:hover { color: var(--t1); }
+.shell-breadcrumbs__leaf { color: var(--t1); font-weight: 600; }
+.shell-breadcrumbs__sep { color: var(--t3); }
+
+/* ═══════════════════════ SHELL: GLOBAL CANVAS (3D) ═══════════════════════ */
+.global-canvas {
+  position: absolute; inset: 0;
+  pointer-events: none; /* The scene component enables events as needed */
+}
+
+/* ═══════════════════════ SHELL: TAB CONTENT ═══════════════════════ */
+.shell-content {
+  grid-area: content;
+  position: relative;
+  overflow: hidden;
+  background: var(--bg);
+}
+.shell-content__tab {
+  position: absolute; inset: 0;
+  overflow: auto;
+}
+.shell-content__tab[hidden] { display: none !important; }
+
+/* ═══════════════════════ SHELL: ROOT GRID ═══════════════════════ */
+.shell-layout {
+  display: grid;
+  grid-template-columns: var(--sidebar-w) 1fr;
+  grid-template-rows: var(--topbar-h) var(--tabbar-h) auto 1fr;
+  grid-template-areas:
+    "sidebar topbar"
+    "sidebar tabbar"
+    "sidebar breadcrumbs"
+    "sidebar content";
+  height: 100vh; width: 100vw;
+  background: var(--bg); color: var(--t1);
+  font-family: "Nunito", system-ui, sans-serif;
+}
