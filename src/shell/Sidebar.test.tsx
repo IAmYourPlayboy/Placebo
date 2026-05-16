@@ -1,6 +1,6 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, it, expect, beforeAll, beforeEach } from "vitest";
 import { ThemeProvider } from "../theme";
 import { TabManager } from "./tabs/TabManager";
 import { Scene3DRegistry } from "./scene3d/Scene3DRegistry";
@@ -10,6 +10,10 @@ import i18n from "../i18n";
 beforeAll(async () => {
   // jsdom navigator language is en-US, but the assertions expect ru labels.
   await i18n.changeLanguage("ru");
+});
+
+beforeEach(() => {
+  try { localStorage.clear(); } catch { /* ignore */ }
 });
 
 function mount() {

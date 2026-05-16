@@ -5,6 +5,7 @@ import { createMemoryRouter } from "react-router-dom";
 import { routes } from "../routes";
 import type { Tab, TabId, TabManagerApi } from "./types";
 import { titleForPath } from "./tabTitles";
+import { loadSnapshot, saveSnapshot } from "./persistence";
 import { useTranslation } from "react-i18next";
 
 export const TabContext = createContext<TabManagerApi | null>(null);
@@ -46,6 +47,52 @@ export function TabManager({ children, initialPath = "/home" }: { children: Reac
       tabsRef.current.forEach((tab) => tab.router.dispose?.());
     };
   }, []);
+
+  // Persistence: загрузить snapshot ОДИН раз при mount. Пока не загрузили –
+  // не сохраняем (флаг restoredRef), иначе перезапишем валидный snapshot
+  // дефолтным /home до того, как успеем его прочитать.
+  const restoredRef = useRef(false);
+  useEffect(() => {
+    let cancelled = false;
+    loadSnapshot().then((snap) => {
+      if (cancelled) return;
+      if (snap) {
+        const restored: Tab[] = snap.tabs.map((s) => ({
+          id: s.id,
+          title: s.title,
+          initialPath: s.initialPath,
+          router: createMemoryRouter(routes, { initialEntries: [s.currentPath] }),
+          createdAt: Date.now(),
+        }));
+        // dispose initial /home router we created on first render – оно нам
+        // больше не нужно, восстановленные табы заменяют его полностью.
+        initial.router.dispose?.();
+        setTabs(restored);
+        const fallback = restored[0].id;
+        const active = restored.find((x) => x.id === snap.activeTabId)?.id ?? fallback;
+        setActiveTabId(active);
+      }
+      restoredRef.current = true;
+    });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Persistence: автосохранение при любом изменении tabs/activeTabId.
+  // TODO: добавить debounce, если число записей в SQLite станет проблемой.
+  useEffect(() => {
+    if (!restoredRef.current) return;
+    const snap = {
+      tabs: tabs.map((tab) => ({
+        id: tab.id,
+        initialPath: tab.initialPath,
+        title: tab.title,
+        currentPath: tab.router.state.location.pathname,
+      })),
+      activeTabId,
+    };
+    saveSnapshot(snap);
+  }, [tabs, activeTabId]);
 
   const openTab = useCallback<TabManagerApi["openTab"]>(
     (path, title) => {

@@ -1,9 +1,15 @@
 import { renderHook, act } from "@testing-library/react";
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { ReactNode } from "react";
 import { TabManager } from "./TabManager";
 import { useTabs } from "./useTabs";
 import "../../i18n"; // ensures i18n is initialized for titleForPath
+
+beforeEach(() => {
+  // Persistence layer falls back to localStorage in tests; clear so each
+  // test starts with no restored snapshot.
+  try { localStorage.clear(); } catch { /* ignore */ }
+});
 
 function wrapper({ children }: { children: ReactNode }) {
   return <TabManager initialPath="/home">{children}</TabManager>;
