@@ -3,6 +3,7 @@ pub mod boosts;
 pub mod cameras;
 pub mod clips;
 pub mod health;
+pub mod me;
 pub mod ratings;
 pub mod rooms;
 pub mod users;
@@ -14,6 +15,7 @@ use crate::app_state::AppState;
 pub fn api_router() -> Router<AppState> {
     Router::new()
         .nest("/auth", auth::router())
+        .merge(me::router())
         .nest("/cameras", cameras::router()
             .merge(ratings::router())
             .merge(boosts::router())

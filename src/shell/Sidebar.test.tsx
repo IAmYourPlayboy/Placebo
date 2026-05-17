@@ -1,11 +1,32 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, it, expect, beforeAll, beforeEach } from "vitest";
+import { describe, it, expect, beforeAll, beforeEach, vi } from "vitest";
 import { ThemeProvider } from "../theme";
+import { AuthProvider } from "../auth/AuthProvider";
 import { TabManager } from "./tabs/TabManager";
 import { Scene3DRegistry } from "./scene3d/Scene3DRegistry";
 import ShellRoot from "./ShellRoot";
 import i18n from "../i18n";
+
+// Stub the token store so AuthProvider doesn't try to invoke Tauri commands in jsdom,
+// and stub /me so the bootstrap settles into "anonymous" deterministically. The tab
+// titles we assert on come from the title registry, not the rendered screens, so the
+// AuthGuard redirect inside each tab is fine — Sidebar still drives tab open/activate
+// the same way.
+vi.mock("../auth/tokenStorage", () => ({
+  loadToken: vi.fn(async () => null),
+  saveToken: vi.fn(async () => {}),
+  clearToken: vi.fn(async () => {}),
+}));
+vi.mock("../api/auth", () => ({
+  me: vi.fn(async () => {
+    throw new Error("unreachable in this test");
+  }),
+  register: vi.fn(),
+  login: vi.fn(),
+  logout: vi.fn(),
+  refresh: vi.fn(),
+}));
 
 beforeAll(async () => {
   // jsdom navigator language is en-US, but the assertions expect ru labels.
@@ -19,11 +40,13 @@ beforeEach(() => {
 function mount() {
   return render(
     <ThemeProvider>
-      <Scene3DRegistry>
-        <TabManager initialPath="/home">
-          <ShellRoot />
-        </TabManager>
-      </Scene3DRegistry>
+      <AuthProvider>
+        <Scene3DRegistry>
+          <TabManager initialPath="/home">
+            <ShellRoot />
+          </TabManager>
+        </Scene3DRegistry>
+      </AuthProvider>
     </ThemeProvider>,
   );
 }

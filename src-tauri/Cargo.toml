@@ -27,6 +27,9 @@ uuid = { version = "1.6", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 thiserror = "1.0"
 anyhow = "1.0"
+# OS keychain for storing the auth token (Windows Credential Manager / macOS Keychain / Secret Service).
+# Default features enable the platform-native backend on every supported OS.
+keyring = "3"
 
 [profile.release]
 codegen-units = 1

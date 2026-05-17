@@ -1165,7 +1165,16 @@ button:active { opacity: .75; }
   padding: 10px 20px; border-radius: 10px;
   border: 1px solid var(--border); background: var(--bg);
   color: var(--t3); cursor: not-allowed; font-size: 14px;
+  font-family: inherit;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
 }
+.settings__danger:not(:disabled) {
+  background: #d12850;
+  color: #fff;
+  border-color: #d12850;
+  cursor: pointer;
+}
+.settings__danger:not(:disabled):hover { background: #a61f40; border-color: #a61f40; }
 .settings__hint { font-size: 13px; color: var(--t3); margin-top: 8px; }
 
 /* ═══════════════════════ SHELL: SIDEBAR ═══════════════════════ */

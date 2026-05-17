@@ -122,7 +122,7 @@ d:\Projects\Placebo\
 
 - [x] **M0 Foundation** (2026-05-15): ts-rs pipeline, react-i18next, ThemeProvider, user_preferences IPC, dead-code cleanup.
 - [x] **M1 Shell** (2026-05-16): sidebar, topbar, per-tab memory router, breadcrumbs, theme toggle, skeleton screens, tab persistence.
-- [ ] M2 Auth (welcome / register / login).
+- [x] **M2 Auth** (2026-05-17): welcome / register / login, AuthProvider + AuthGuard, OS-keychain token storage, /me endpoint, username + DOB on users.
 - [ ] M3 Cameras seed + HLS proxy.
 - [ ] M4 Home + Categories + World3D in shell.
 - [ ] M5 Rooms + WebSocket + chat.
