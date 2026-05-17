@@ -10,6 +10,8 @@ pub enum AppError {
     Forbidden(String),
     Validation(String),
     Conflict(String),
+    /// Username is taken; the body carries 3 unused suggestions for the client to show.
+    UsernameTaken { suggestions: Vec<String> },
     RateLimited { retry_after: u64 },
     Internal(anyhow::Error),
 }
@@ -22,6 +24,7 @@ impl std::fmt::Display for AppError {
             AppError::Forbidden(msg) => write!(f, "Forbidden: {msg}"),
             AppError::Validation(msg) => write!(f, "Validation error: {msg}"),
             AppError::Conflict(msg) => write!(f, "Conflict: {msg}"),
+            AppError::UsernameTaken { .. } => write!(f, "Username already taken"),
             AppError::RateLimited { retry_after } => {
                 write!(f, "Rate limited, retry after {retry_after}s")
             }
@@ -32,6 +35,18 @@ impl std::fmt::Display for AppError {
 
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
+        // Special case: UsernameTaken carries structured `suggestions` in the body.
+        if let AppError::UsernameTaken { suggestions } = &self {
+            let body = json!({
+                "error": {
+                    "code": "USERNAME_TAKEN",
+                    "message": "Username already taken",
+                    "suggestions": suggestions,
+                }
+            });
+            return (StatusCode::CONFLICT, Json(body)).into_response();
+        }
+
         let (status, code, message) = match &self {
             AppError::NotFound(msg) => (StatusCode::NOT_FOUND, "NOT_FOUND", msg.clone()),
             AppError::Unauthorized(msg) => {
@@ -42,6 +57,7 @@ impl IntoResponse for AppError {
                 (StatusCode::BAD_REQUEST, "VALIDATION_ERROR", msg.clone())
             }
             AppError::Conflict(msg) => (StatusCode::CONFLICT, "CONFLICT", msg.clone()),
+            AppError::UsernameTaken { .. } => unreachable!("handled above"),
             AppError::RateLimited { retry_after } => (
                 StatusCode::TOO_MANY_REQUESTS,
                 "RATE_LIMITED",

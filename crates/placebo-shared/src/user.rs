@@ -1,8 +1,15 @@
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+#[cfg(feature = "export-types")]
+use ts_rs::TS;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+#[cfg_attr(
+    feature = "export-types",
+    derive(TS),
+    ts(export, export_to = "../bindings/")
+)]
 #[serde(rename_all = "camelCase")]
 pub struct UserResponse {
     pub id: Uuid,
@@ -13,6 +20,11 @@ pub struct UserResponse {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+#[cfg_attr(
+    feature = "export-types",
+    derive(TS),
+    ts(export, export_to = "../bindings/")
+)]
 #[serde(rename_all = "camelCase")]
 pub struct UserProfile {
     pub id: Uuid,
@@ -28,7 +40,36 @@ pub struct UserProfile {
     pub updated_at: Option<DateTime<Utc>>,
 }
 
+/// Response body for `GET /api/v1/me`. Returns the authenticated user's full profile,
+/// including username and DOB visibility flag added in M2.
 #[derive(Serialize, Deserialize, Debug, Clone)]
+#[cfg_attr(
+    feature = "export-types",
+    derive(TS),
+    ts(export, export_to = "../bindings/")
+)]
+#[serde(rename_all = "camelCase")]
+pub struct MeResponse {
+    pub id: Uuid,
+    pub email: String,
+    pub username: String,
+    pub display_name: String,
+    pub avatar_url: Option<String>,
+    pub locale: String,
+    pub is_premium: bool,
+    pub premium_until: Option<DateTime<Utc>>,
+    pub date_of_birth: Option<NaiveDate>,
+    pub date_of_birth_hidden: bool,
+    pub email_verified: bool,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[cfg_attr(
+    feature = "export-types",
+    derive(TS),
+    ts(export, export_to = "../bindings/")
+)]
 #[serde(rename_all = "camelCase")]
 pub struct BoostTokenInfo {
     pub camera_id: Uuid,
@@ -83,6 +124,32 @@ mod tests {
         assert_eq!(deserialized.cloud_used_bytes, 5_000_000_000);
         assert!(json.contains("\"cloudUsedBytes\""));
         assert!(json.contains("\"premiumUntil\""));
+    }
+
+    #[test]
+    fn me_response_serde() {
+        let now = Utc::now();
+        let me = MeResponse {
+            id: Uuid::new_v4(),
+            email: "alice@placebo.dev".into(),
+            username: "alice".into(),
+            display_name: "Alice".into(),
+            avatar_url: None,
+            locale: "ru".into(),
+            is_premium: true,
+            premium_until: Some(now),
+            date_of_birth: Some(NaiveDate::from_ymd_opt(1990, 5, 17).unwrap()),
+            date_of_birth_hidden: true,
+            email_verified: false,
+            created_at: now,
+        };
+        let json = serde_json::to_string(&me).unwrap();
+        let back: MeResponse = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.username, "alice");
+        assert_eq!(back.date_of_birth_hidden, true);
+        assert!(json.contains("\"dateOfBirth\""));
+        assert!(json.contains("\"dateOfBirthHidden\""));
+        assert!(json.contains("\"emailVerified\""));
     }
 
     #[test]

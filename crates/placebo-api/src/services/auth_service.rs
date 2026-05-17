@@ -8,8 +8,8 @@ use uuid::Uuid;
 
 use crate::error::AppError;
 use crate::redis::session::{self, SessionData};
-use crate::repositories::user_repo;
-use placebo_shared::auth::{AuthResponse, RegisterRequest, LoginRequest};
+use crate::repositories::user_repo::{self, CreateUserArgs};
+use placebo_shared::auth::{AuthResponse, LoginRequest, RegisterRequest};
 
 /// Session TTL: 30 days in seconds.
 const SESSION_TTL: u64 = 30 * 24 * 60 * 60;
@@ -61,28 +61,68 @@ pub async fn register(
         return Err(AppError::Conflict("Email already registered".into()));
     }
 
-    // 3. Hash password
+    // 3. Resolve username – either honour the requested one (if free) or generate from
+    //    display_name. On conflict we surface 3 alternatives so the client can render chips.
+    let username = match req.username.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        Some(requested) => {
+            let free = user_repo::username_available(pool, requested)
+                .await
+                .map_err(|e| AppError::Internal(e.into()))?;
+            if !free {
+                let mut suggestions = Vec::with_capacity(3);
+                for _ in 0..3 {
+                    suggestions.push(
+                        user_repo::generate_unique_username(pool, requested)
+                            .await
+                            .map_err(|e| AppError::Internal(e.into()))?,
+                    );
+                }
+                return Err(AppError::UsernameTaken { suggestions });
+            }
+            requested.to_string()
+        }
+        None => user_repo::generate_unique_username(pool, &req.display_name)
+            .await
+            .map_err(|e| AppError::Internal(e.into()))?,
+    };
+
+    // 4. Hash password
     let password_hash = hash_password(&req.password)?;
 
-    // 4. Create user in database
+    // 5. Create user in database
     let locale = req.locale.as_deref().unwrap_or("en");
     let user = user_repo::create_user(
         pool,
-        &req.email,
-        &req.display_name,
-        &password_hash,
-        locale,
-        auto_verify_email,
+        CreateUserArgs {
+            email: &req.email,
+            display_name: &req.display_name,
+            username: &username,
+            password_hash: &password_hash,
+            locale,
+            date_of_birth: req.date_of_birth,
+            // Privacy-first default: hide DOB unless the user explicitly opts in.
+            date_of_birth_hidden: req.date_of_birth_hidden.unwrap_or(true),
+            email_verified: auto_verify_email,
+        },
     )
     .await
     .map_err(|e| match &e {
         sqlx::Error::Database(db_err) if db_err.constraint() == Some("users_email_key") => {
             AppError::Conflict("Email already registered".into())
         }
+        sqlx::Error::Database(db_err)
+            if db_err.constraint() == Some("idx_users_username_normalized") =>
+        {
+            // Race: username became taken between our check and the insert. Best-effort
+            // suggestions for the client.
+            AppError::UsernameTaken {
+                suggestions: Vec::new(),
+            }
+        }
         _ => AppError::Internal(e.into()),
     })?;
 
-    // 5. If not auto-verified, generate verification token and store it
+    // 6. If not auto-verified, generate verification token and store it
     if !auto_verify_email {
         let verify_token = generate_token();
         user_repo::set_email_verify_token(pool, user.id, &verify_token)
@@ -92,7 +132,7 @@ pub async fn register(
         tracing::info!(user_id = %user.id, "Email verification token generated (email sending not yet implemented)");
     }
 
-    // 6. Create session
+    // 7. Create session
     let token = generate_token();
     let session = SessionData {
         user_id: user.id,
@@ -111,6 +151,7 @@ pub async fn register(
         token,
         user_id: user.id,
         email: user.email,
+        username: username.clone(),
         display_name: user.display_name,
         is_premium: user.is_premium,
         expires_in_seconds: SESSION_TTL,
@@ -169,6 +210,9 @@ pub async fn login(
         token,
         user_id: user.id,
         email: user.email,
+        // Migration 008 backfills every existing row, so an Option here always resolves;
+        // the empty string fallback is a defensive measure that should never fire in practice.
+        username: user.username.unwrap_or_default(),
         display_name: user.display_name,
         is_premium: user.is_premium,
         expires_in_seconds: SESSION_TTL,
