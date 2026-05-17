@@ -1,0 +1,57 @@
+# Local-dev infrastructure for Placebo: Postgres+PostGIS and Redis.
+#
+# Usage:
+#   docker compose -f docker-compose.dev.yml up -d        # start in background
+#   docker compose -f docker-compose.dev.yml logs -f      # tail logs
+#   docker compose -f docker-compose.dev.yml down         # stop, keep data
+#   docker compose -f docker-compose.dev.yml down -v      # stop AND wipe volumes
+#
+# Notes:
+#   - Redis runs on 6380 to dodge a clash with another project's Redis on 6379.
+#     The crates/placebo-api/.env should set REDIS_URL=redis://localhost:6380.
+#   - Volumes are named (placebo_pg_data, placebo_redis_data) so a `docker compose down`
+#     does NOT erase your dev data. Use `down -v` for a clean slate.
+#   - Postgres credentials match crates/placebo-api/.env
+#     (DATABASE_URL=postgres://placebo@localhost:5432/placebo).
+#     Trust auth is enabled inside the container so the empty-password URL works.
+
+services:
+  postgres:
+    image: postgis/postgis:17-3.4
+    container_name: placebo-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: placebo
+      POSTGRES_DB: placebo
+      # Trust auth on the docker network — the container only listens on the host's
+      # 127.0.0.1 mapping, so this is dev-machine-local. Do NOT mirror this in prod.
+      POSTGRES_HOST_AUTH_METHOD: trust
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - placebo_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U placebo -d placebo"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: placebo-redis
+    restart: unless-stopped
+    # Bind to 127.0.0.1:6380 specifically so we never collide with another project's
+    # Redis sitting on 6379.
+    ports:
+      - "127.0.0.1:6380:6379"
+    volumes:
+      - placebo_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  placebo_pg_data:
+  placebo_redis_data:
