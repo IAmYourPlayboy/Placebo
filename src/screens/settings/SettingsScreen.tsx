@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next";
+import { useAuth } from "../../auth/useAuth";
 import { useTheme } from "../../theme/useTheme";
 import type { ThemeChoice } from "../../theme";
 
@@ -8,7 +9,9 @@ const LANGS = ["ru", "en"] as const;
 export default function SettingsScreen() {
   const { t, i18n } = useTranslation();
   const { choice, setChoice } = useTheme();
+  const { status, logout } = useAuth();
   const currentLang = i18n.resolvedLanguage ?? i18n.language ?? "";
+  const isAuthed = status === "authenticated";
 
   return (
     <div className="settings">
@@ -54,10 +57,16 @@ export default function SettingsScreen() {
 
       <section className="settings__group">
         <h2>{t("settings.account.title")}</h2>
-        <button className="settings__danger" disabled>
+        <button
+          className="settings__danger"
+          disabled={!isAuthed}
+          onClick={isAuthed ? () => void logout() : undefined}
+        >
           {t("settings.account.logout")}
         </button>
-        <p className="settings__hint">{t("settings.account.logout.hint")}</p>
+        {!isAuthed && (
+          <p className="settings__hint">{t("settings.account.logout.hint")}</p>
+        )}
       </section>
     </div>
   );
