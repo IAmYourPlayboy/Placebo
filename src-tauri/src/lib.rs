@@ -46,6 +46,9 @@ pub fn run() {
             commands::preferences::prefs_get,
             commands::preferences::prefs_set,
             commands::preferences::prefs_all,
+            commands::secure::secure_get,
+            commands::secure::secure_set,
+            commands::secure::secure_delete,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
