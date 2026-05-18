@@ -336,6 +336,12 @@ Pipeline bash-скрипты на Windows запускать через Git Bash
 - Белые плоскости вместо видео = запросы на go2rtc. Убрать `VITE_GO2RTC_URL` из `.env` и `launch.json`.
 - Сегменты 403/410 = истёк YouTube HLS URL → перезапустить Vite (сбросит кеш yt-dlp).
 - Тайлы 502 = не запущен axum API.
+- `gh auth login` сам по себе бесполезен – дефолтный fine-grained PAT не
+  имеет прав на этот репо. Нужен токен с явно выбранным `IAmYourPlayboy/Placebo`
+  и правами `Contents` + `Pull requests` (read & write). Подробности в RUNBOOK §6.
+- YouTube anti-bot блокирует анонимный `yt-dlp -g` (с 2026). С residential
+  IP вернёт `Sign in to confirm you're not a bot`. axum-прокси отрабатывает
+  ошибку как 500+JSON. Пока не решено – планируется EU-VPS для прода.
 
 ---
 
