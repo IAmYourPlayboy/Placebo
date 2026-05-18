@@ -2,7 +2,8 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use placebo_shared::camera::{
-    CameraResponse, CameraType, Category, RetentionTier, StreamProtocol, StreamType, VideoCodec,
+    CameraResponse, CameraType, Category, RetentionTier, StreamProtocol, StreamSourceType,
+    StreamType, VideoCodec,
 };
 use placebo_shared::pagination::{PaginatedResponse, PaginationMeta};
 
@@ -49,6 +50,20 @@ pub fn to_response(row: &CameraRow) -> CameraResponse {
         .parse::<VideoCodec>()
         .unwrap_or(VideoCodec::H264);
 
+    let stream_source_type = row
+        .stream_source_type
+        .as_deref()
+        .and_then(|s| s.parse::<StreamSourceType>().ok())
+        .unwrap_or(StreamSourceType::Rtsp);
+
+    // Public manifest URL: only present for source types we actually proxy.
+    let proxy_manifest_url = match stream_source_type {
+        StreamSourceType::YoutubeLive
+        | StreamSourceType::DirectHls
+        | StreamSourceType::LoopMp4 => Some(format!("/api/v1/hls-proxy/{}", row.slug)),
+        StreamSourceType::Rtsp => None,
+    };
+
     let available_qualities: Vec<String> = match &row.available_qualities {
         serde_json::Value::Array(arr) => arr
             .iter()
@@ -86,6 +101,8 @@ pub fn to_response(row: &CameraRow) -> CameraResponse {
         // Sensitive fields (stream_url, backup_url, external_id, frame_rate) are NOT included
         stream_type,
         stream_protocol,
+        stream_source_type,
+        proxy_manifest_url,
         stream_quality_default: row.stream_quality_default.clone(),
         available_qualities,
 
