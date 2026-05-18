@@ -2,7 +2,8 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use placebo_shared::camera::{
-    CameraResponse, CameraType, Category, RetentionTier, StreamProtocol, StreamType, VideoCodec,
+    CameraResponse, CameraType, Category, RetentionTier, StreamProtocol, StreamSourceType,
+    StreamType, VideoCodec,
 };
 use placebo_shared::pagination::{PaginatedResponse, PaginationMeta};
 
@@ -49,6 +50,20 @@ pub fn to_response(row: &CameraRow) -> CameraResponse {
         .parse::<VideoCodec>()
         .unwrap_or(VideoCodec::H264);
 
+    let stream_source_type = row
+        .stream_source_type
+        .as_deref()
+        .and_then(|s| s.parse::<StreamSourceType>().ok())
+        .unwrap_or(StreamSourceType::Rtsp);
+
+    // Public manifest URL: only present for source types we actually proxy.
+    let proxy_manifest_url = match stream_source_type {
+        StreamSourceType::YoutubeLive
+        | StreamSourceType::DirectHls
+        | StreamSourceType::LoopMp4 => Some(format!("/api/v1/hls-proxy/{}", row.slug)),
+        StreamSourceType::Rtsp => None,
+    };
+
     let available_qualities: Vec<String> = match &row.available_qualities {
         serde_json::Value::Array(arr) => arr
             .iter()
@@ -86,6 +101,8 @@ pub fn to_response(row: &CameraRow) -> CameraResponse {
         // Sensitive fields (stream_url, backup_url, external_id, frame_rate) are NOT included
         stream_type,
         stream_protocol,
+        stream_source_type,
+        proxy_manifest_url,
         stream_quality_default: row.stream_quality_default.clone(),
         available_qualities,
 
@@ -226,4 +243,165 @@ pub async fn get_count(
 ) -> Result<i64, AppError> {
     let count = camera_repo::get_count_filtered(pool, category, camera_type).await?;
     Ok(count)
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Utc;
+
+    /// Build a minimal CameraRow with the given stream_source_type and slug.
+    /// All other fields get sensible defaults so to_response() can map cleanly.
+    fn make_row(stream_source_type: Option<&str>, slug: &str) -> CameraRow {
+        CameraRow {
+            id: Uuid::new_v4(),
+            name: "Test Camera".to_string(),
+            slug: slug.to_string(),
+            camera_type: "public".to_string(),
+            external_id: None,
+
+            country: None,
+            country_code: None,
+            region: None,
+            city: None,
+            district: None,
+            address: None,
+            custom_label: None,
+            lat: 0.0,
+            lng: 0.0,
+            timezone: None,
+
+            stream_url: "rtsp://example/foo".to_string(),
+            backup_url: None,
+            stream_type: None,
+            stream_protocol: None,
+            stream_quality_default: None,
+            available_qualities: serde_json::json!([]),
+            frame_rate: None,
+            bitrate_kbps: None,
+            codec: None,
+            resolution_w: None,
+            resolution_h: None,
+            latency_ms: None,
+
+            has_audio: false,
+            has_night_vision: false,
+            is_underwater: false,
+
+            category: "city".to_string(),
+            subcategory: None,
+            tags: serde_json::json!([]),
+            description_en: None,
+            thumbnail_url: None,
+            source_url: None,
+            attribution: None,
+
+            recording_enabled: false,
+            retention_tier: "tier5".to_string(),
+            recording_retention_days: 0,
+            recording_codec: "h264".to_string(),
+
+            height_above_ground: None,
+            camera_azimuth: None,
+            camera_elevation: None,
+            fov_horizontal: None,
+            fov_vertical: None,
+
+            manufacturer: None,
+            camera_model: None,
+            added_to_placebo_at: None,
+            is_partner_camera: false,
+            owner_name: None,
+
+            stream_source_type: stream_source_type.map(String::from),
+            stream_source_config: serde_json::json!({}),
+
+            created_at: Utc::now(),
+            updated_at: None,
+
+            distance_m: None,
+        }
+    }
+
+    #[test]
+    fn to_response_youtube_live_sets_proxy_manifest_url() {
+        let row = make_row(Some("youtube_live"), "yt-cam");
+        let resp = to_response(&row);
+        assert_eq!(resp.stream_source_type, StreamSourceType::YoutubeLive);
+        assert_eq!(
+            resp.proxy_manifest_url,
+            Some("/api/v1/hls-proxy/yt-cam".to_string())
+        );
+    }
+
+    #[test]
+    fn to_response_direct_hls_sets_proxy_manifest_url() {
+        let row = make_row(Some("direct_hls"), "hls-cam");
+        let resp = to_response(&row);
+        assert_eq!(resp.stream_source_type, StreamSourceType::DirectHls);
+        assert_eq!(
+            resp.proxy_manifest_url,
+            Some("/api/v1/hls-proxy/hls-cam".to_string())
+        );
+    }
+
+    #[test]
+    fn to_response_loop_mp4_sets_proxy_manifest_url() {
+        let row = make_row(Some("loop_mp4"), "loop-cam");
+        let resp = to_response(&row);
+        assert_eq!(resp.stream_source_type, StreamSourceType::LoopMp4);
+        assert_eq!(
+            resp.proxy_manifest_url,
+            Some("/api/v1/hls-proxy/loop-cam".to_string())
+        );
+    }
+
+    #[test]
+    fn to_response_rtsp_has_no_proxy_manifest_url() {
+        let row = make_row(Some("rtsp"), "rtsp-cam");
+        let resp = to_response(&row);
+        assert_eq!(resp.stream_source_type, StreamSourceType::Rtsp);
+        assert_eq!(resp.proxy_manifest_url, None);
+    }
+
+    #[test]
+    fn to_response_null_stream_source_type_falls_back_to_rtsp() {
+        let row = make_row(None, "null-cam");
+        let resp = to_response(&row);
+        assert_eq!(resp.stream_source_type, StreamSourceType::Rtsp);
+        assert_eq!(resp.proxy_manifest_url, None);
+    }
+
+    #[test]
+    fn to_response_unparseable_stream_source_type_falls_back_to_rtsp() {
+        let row = make_row(Some("bogus"), "bogus-cam");
+        let resp = to_response(&row);
+        assert_eq!(resp.stream_source_type, StreamSourceType::Rtsp);
+        assert_eq!(resp.proxy_manifest_url, None);
+    }
+
+    #[test]
+    fn to_response_strips_sensitive_fields_from_json() {
+        let row = make_row(Some("youtube_live"), "sensitive-cam");
+        let resp = to_response(&row);
+        let json = serde_json::to_string(&resp).unwrap();
+
+        // CameraResponse must not leak sensitive DB fields, in any case.
+        assert!(!json.contains("streamUrl"), "streamUrl leaked: {json}");
+        assert!(!json.contains("stream_url"), "stream_url leaked: {json}");
+        assert!(!json.contains("backupUrl"), "backupUrl leaked: {json}");
+        assert!(!json.contains("backup_url"), "backup_url leaked: {json}");
+        assert!(!json.contains("externalId"), "externalId leaked: {json}");
+        assert!(!json.contains("external_id"), "external_id leaked: {json}");
+        assert!(!json.contains("frameRate"), "frameRate leaked: {json}");
+        assert!(!json.contains("frame_rate"), "frame_rate leaked: {json}");
+
+        // And the public fields we just tested must be present.
+        assert!(json.contains("\"streamSourceType\":\"youtube_live\""));
+        assert!(json.contains("\"proxyManifestUrl\":\"/api/v1/hls-proxy/sensitive-cam\""));
+    }
 }

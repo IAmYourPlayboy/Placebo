@@ -18,6 +18,8 @@ const CAMERA_SELECT: &str = r#"
     recording_enabled, retention_tier::TEXT, recording_retention_days, recording_codec::TEXT,
     height_above_ground, camera_azimuth, camera_elevation, fov_horizontal, fov_vertical,
     manufacturer, camera_model, added_to_placebo_at, is_partner_camera, owner_name,
+    stream_source_type::TEXT as stream_source_type,
+    stream_source_config,
     created_at, updated_at
 "#;
 
@@ -93,6 +95,10 @@ pub struct CameraRow {
     pub is_partner_camera: bool,
     pub owner_name: Option<String>,
 
+    // Stream source descriptor (M3)
+    pub stream_source_type: Option<String>,
+    pub stream_source_config: serde_json::Value,
+
     // Timestamps
     pub created_at: DateTime<Utc>,
     pub updated_at: Option<DateTime<Utc>>,
@@ -164,6 +170,9 @@ pub struct NewCamera {
     pub camera_model: Option<String>,
     pub is_partner_camera: bool,
     pub owner_name: Option<String>,
+
+    pub stream_source_type: Option<String>,
+    pub stream_source_config: serde_json::Value,
 }
 
 // ---------------------------------------------------------------------------
@@ -250,6 +259,23 @@ pub async fn get_by_slug(pool: &PgPool, slug: &str) -> Result<Option<CameraRow>,
         .bind(slug)
         .fetch_optional(pool)
         .await
+}
+
+/// Lightweight lookup used only by the HLS proxy. Returns the source
+/// type and JSON config for a camera identified by slug. Never exposes
+/// `stream_url` itself – the proxy resolves the upstream URL via
+/// `services::hls_source` from the descriptor instead.
+pub async fn stream_source_for_slug(
+    pool: &PgPool,
+    slug: &str,
+) -> Result<Option<(String, serde_json::Value)>, sqlx::Error> {
+    let row: Option<(Option<String>, serde_json::Value)> = sqlx::query_as(
+        "SELECT stream_source_type::text, stream_source_config FROM cameras WHERE slug = $1",
+    )
+    .bind(slug)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.and_then(|(t, c)| t.map(|tt| (tt, c))))
 }
 
 /// Find cameras by city name (case-insensitive).
@@ -365,19 +391,21 @@ pub async fn insert(pool: &PgPool, c: &NewCamera) -> Result<CameraRow, sqlx::Err
             category, subcategory, tags, description_en, thumbnail_url, source_url, attribution,
             recording_enabled, retention_tier, recording_retention_days, recording_codec,
             height_above_ground, camera_azimuth, camera_elevation, fov_horizontal, fov_vertical,
-            manufacturer, camera_model, is_partner_camera, owner_name
+            manufacturer, camera_model, is_partner_camera, owner_name,
+            stream_source_type, stream_source_config
         ) VALUES (
-            $1, $2, $3::camera_type_enum, $4,
+            $1, $2, $3::camera_type, $4,
             $5, $6, $7, $8, $9, $10, $11,
             ST_SetSRID(ST_Point($12, $13), 4326), $14,
-            $15, $16, $17::stream_type_enum, $18::stream_protocol_enum,
+            $15, $16, $17::stream_type, $18::stream_protocol,
             $19, $20, $21, $22,
-            $23::video_codec_enum, $24, $25, $26,
+            $23::video_codec, $24, $25, $26,
             $27, $28, $29,
             $30, $31, $32, $33, $34, $35, $36,
-            $37, $38::retention_tier_enum, $39, $40::video_codec_enum,
+            $37, $38::retention_tier, $39, $40::video_codec,
             $41, $42, $43, $44, $45,
-            $46, $47, $48, $49
+            $46, $47, $48, $49,
+            $50::stream_source_type, $51
         ) RETURNING {CAMERA_SELECT}, NULL::float8 as distance_m"#
     );
 
@@ -408,7 +436,7 @@ pub async fn insert(pool: &PgPool, c: &NewCamera) -> Result<CameraRow, sqlx::Err
         .bind(&c.codec)                    // $23
         .bind(c.resolution_w)              // $24
         .bind(c.resolution_h)              // $25
-        .bind(c.latency_ms)               // $26
+        .bind(c.latency_ms)                // $26
         .bind(c.has_audio)                 // $27
         .bind(c.has_night_vision)          // $28
         .bind(c.is_underwater)             // $29
@@ -431,7 +459,9 @@ pub async fn insert(pool: &PgPool, c: &NewCamera) -> Result<CameraRow, sqlx::Err
         .bind(&c.manufacturer)             // $46
         .bind(&c.camera_model)             // $47
         .bind(c.is_partner_camera)         // $48
-        .bind(&c.owner_name)              // $49
+        .bind(&c.owner_name)               // $49
+        .bind(&c.stream_source_type)       // $50
+        .bind(&c.stream_source_config)     // $51
         .fetch_one(pool)
         .await
 }

@@ -19,7 +19,7 @@ placebo-shared = { path = "../placebo-shared" }
 axum = { version = "0.7", features = ["ws", "macros"] }
 axum-extra = { version = "0.9", features = ["typed-header"] }
 tower = { version = "0.5", features = ["full"] }
-tower-http = { version = "0.6", features = ["cors", "trace", "request-id", "compression-gzip"] }
+tower-http = { version = "0.6", features = ["cors", "trace", "request-id", "compression-gzip", "fs"] }
 tokio = { version = "1", features = ["full"] }
 
 # Database
@@ -51,6 +51,10 @@ argon2 = "0.5"
 rand = "0.8"
 hex = "0.4"
 
+# HLS proxy (M3): upstream HTTP fetch + base64url segment URLs
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream", "json", "cookies"] }
+base64 = "0.22"
+futures-util = "0.3"
+
 [dev-dependencies]
-reqwest = { version = "0.12", features = ["json", "cookies"] }
 tokio = { version = "1", features = ["test-util"] }
