@@ -3,12 +3,19 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::str::FromStr;
 use uuid::Uuid;
+#[cfg(feature = "export-types")]
+use ts_rs::TS;
 
 // ---------------------------------------------------------------------------
 // Enums
 // ---------------------------------------------------------------------------
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(
+    feature = "export-types",
+    derive(TS),
+    ts(export, export_to = "../bindings/")
+)]
 #[serde(rename_all = "lowercase")]
 pub enum CameraType {
     Public,
@@ -48,6 +55,11 @@ impl TryFrom<&str> for CameraType {
 // ---------------------------------------------------------------------------
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(
+    feature = "export-types",
+    derive(TS),
+    ts(export, export_to = "../bindings/")
+)]
 #[serde(rename_all = "lowercase")]
 pub enum RetentionTier {
     Tier1,
@@ -93,6 +105,11 @@ impl TryFrom<&str> for RetentionTier {
 // ---------------------------------------------------------------------------
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(
+    feature = "export-types",
+    derive(TS),
+    ts(export, export_to = "../bindings/")
+)]
 #[serde(rename_all = "lowercase")]
 pub enum StreamType {
     Rtsp,
@@ -141,6 +158,11 @@ impl TryFrom<&str> for StreamType {
 // ---------------------------------------------------------------------------
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(
+    feature = "export-types",
+    derive(TS),
+    ts(export, export_to = "../bindings/")
+)]
 #[serde(rename_all = "lowercase")]
 pub enum StreamProtocol {
     Tcp,
@@ -180,6 +202,11 @@ impl TryFrom<&str> for StreamProtocol {
 // ---------------------------------------------------------------------------
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(
+    feature = "export-types",
+    derive(TS),
+    ts(export, export_to = "../bindings/")
+)]
 #[serde(rename_all = "lowercase")]
 pub enum VideoCodec {
     H264,
@@ -222,6 +249,11 @@ impl TryFrom<&str> for VideoCodec {
 // ---------------------------------------------------------------------------
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(
+    feature = "export-types",
+    derive(TS),
+    ts(export, export_to = "../bindings/")
+)]
 #[serde(rename_all = "lowercase")]
 pub enum Category {
     City,
@@ -280,10 +312,62 @@ impl TryFrom<&str> for Category {
 }
 
 // ---------------------------------------------------------------------------
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(
+    feature = "export-types",
+    derive(TS),
+    ts(export, export_to = "../bindings/")
+)]
+#[serde(rename_all = "snake_case")]
+pub enum StreamSourceType {
+    YoutubeLive,
+    DirectHls,
+    LoopMp4,
+    Rtsp,
+}
+
+impl fmt::Display for StreamSourceType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::YoutubeLive => write!(f, "youtube_live"),
+            Self::DirectHls => write!(f, "direct_hls"),
+            Self::LoopMp4 => write!(f, "loop_mp4"),
+            Self::Rtsp => write!(f, "rtsp"),
+        }
+    }
+}
+
+impl FromStr for StreamSourceType {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "youtube_live" => Ok(Self::YoutubeLive),
+            "direct_hls" => Ok(Self::DirectHls),
+            "loop_mp4" => Ok(Self::LoopMp4),
+            "rtsp" => Ok(Self::Rtsp),
+            _ => Err(format!("unknown StreamSourceType: {s}")),
+        }
+    }
+}
+
+impl TryFrom<&str> for StreamSourceType {
+    type Error = String;
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        s.parse()
+    }
+}
+
+// ---------------------------------------------------------------------------
 // CameraResponse – public API shape
 // ---------------------------------------------------------------------------
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+#[cfg_attr(
+    feature = "export-types",
+    derive(TS),
+    ts(export, export_to = "../bindings/")
+)]
 #[serde(rename_all = "camelCase")]
 pub struct CameraResponse {
     pub id: Uuid,
@@ -305,6 +389,8 @@ pub struct CameraResponse {
 
     pub stream_type: Option<StreamType>,
     pub stream_protocol: Option<StreamProtocol>,
+    pub stream_source_type: StreamSourceType,
+    pub proxy_manifest_url: Option<String>,
     pub stream_quality_default: Option<String>,
     pub available_qualities: Vec<String>,
 
@@ -462,6 +548,8 @@ mod tests {
             timezone: Some("Asia/Tokyo".to_string()),
             stream_type: Some(StreamType::Hls),
             stream_protocol: Some(StreamProtocol::Https),
+            stream_source_type: StreamSourceType::YoutubeLive,
+            proxy_manifest_url: Some("/api/v1/hls-proxy/tokyo-tower-cam".to_string()),
             stream_quality_default: Some("1080p".to_string()),
             available_qualities: vec!["720p".to_string(), "1080p".to_string()],
             bitrate_kbps: Some(4000),
@@ -514,6 +602,8 @@ mod tests {
         assert!(json.contains("\"retentionTier\""));
         assert!(json.contains("\"recordingRetentionDays\""));
         assert!(json.contains("\"isPartnerCamera\""));
+        assert!(json.contains("\"streamSourceType\""));
+        assert!(json.contains("\"proxyManifestUrl\""));
 
         // Verify sensitive fields are NOT present
         assert!(!json.contains("stream_url"));
@@ -524,6 +614,49 @@ mod tests {
         assert!(!json.contains("externalId"));
         assert!(!json.contains("frame_rate"));
         assert!(!json.contains("frameRate"));
+    }
+
+    #[test]
+    fn stream_source_type_display_roundtrip() {
+        for variant in [
+            StreamSourceType::YoutubeLive,
+            StreamSourceType::DirectHls,
+            StreamSourceType::LoopMp4,
+            StreamSourceType::Rtsp,
+        ] {
+            let s = variant.to_string();
+            let parsed: StreamSourceType = s.parse().unwrap();
+            assert_eq!(variant, parsed);
+        }
+    }
+
+    #[test]
+    fn stream_source_type_serde_snake_case() {
+        assert_eq!(
+            serde_json::to_string(&StreamSourceType::YoutubeLive).unwrap(),
+            "\"youtube_live\""
+        );
+        assert_eq!(
+            serde_json::to_string(&StreamSourceType::LoopMp4).unwrap(),
+            "\"loop_mp4\""
+        );
+        assert_eq!(
+            serde_json::to_string(&StreamSourceType::DirectHls).unwrap(),
+            "\"direct_hls\""
+        );
+    }
+
+    #[test]
+    fn stream_source_type_try_from_str() {
+        assert_eq!(
+            StreamSourceType::try_from("youtube_live"),
+            Ok(StreamSourceType::YoutubeLive)
+        );
+        assert_eq!(
+            StreamSourceType::try_from("loop_mp4"),
+            Ok(StreamSourceType::LoopMp4)
+        );
+        assert!(StreamSourceType::try_from("bogus").is_err());
     }
 
     #[test]
