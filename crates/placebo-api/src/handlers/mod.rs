@@ -3,6 +3,7 @@ pub mod boosts;
 pub mod cameras;
 pub mod clips;
 pub mod health;
+pub mod hls_proxy;
 pub mod me;
 pub mod ratings;
 pub mod rooms;
@@ -16,6 +17,7 @@ pub fn api_router() -> Router<AppState> {
     Router::new()
         .nest("/auth", auth::router())
         .merge(me::router())
+        .merge(hls_proxy::router())
         .nest("/cameras", cameras::router()
             .merge(ratings::router())
             .merge(boosts::router())

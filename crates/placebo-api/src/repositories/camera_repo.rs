@@ -261,6 +261,23 @@ pub async fn get_by_slug(pool: &PgPool, slug: &str) -> Result<Option<CameraRow>,
         .await
 }
 
+/// Lightweight lookup used only by the HLS proxy. Returns the source
+/// type and JSON config for a camera identified by slug. Never exposes
+/// `stream_url` itself – the proxy resolves the upstream URL via
+/// `services::hls_source` from the descriptor instead.
+pub async fn stream_source_for_slug(
+    pool: &PgPool,
+    slug: &str,
+) -> Result<Option<(String, serde_json::Value)>, sqlx::Error> {
+    let row: Option<(Option<String>, serde_json::Value)> = sqlx::query_as(
+        "SELECT stream_source_type::text, stream_source_config FROM cameras WHERE slug = $1",
+    )
+    .bind(slug)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.and_then(|(t, c)| t.map(|tt| (tt, c))))
+}
+
 /// Find cameras by city name (case-insensitive).
 pub async fn get_by_city(pool: &PgPool, city: &str) -> Result<Vec<CameraRow>, sqlx::Error> {
     let sql = format!(

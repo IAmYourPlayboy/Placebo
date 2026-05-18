@@ -53,3 +53,9 @@ src-tauri/target/
 crates/placebo-shared/bindings/
 src/types/api/*
 !src/types/api/README.md
+
+# loop_mp4 demo assets are large binaries shipped out-of-band (see
+# crates/placebo-api/static/demo/README.md). Keep the README + .gitkeep,
+# ignore everything else.
+crates/placebo-api/static/demo/*
+!crates/placebo-api/static/demo/README.md
