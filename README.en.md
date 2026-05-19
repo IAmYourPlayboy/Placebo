@@ -13,6 +13,13 @@ A space for rooms, profiles, favorite content, and user interaction.
   <img alt="EN" src="https://img.shields.io/badge/README-EN-111827?style=for-the-badge">
 </a>
 
+<br><br>
+
+<img alt="Rust" src="https://img.shields.io/badge/Rust-47.4%25-black?style=flat-square&logo=rust">
+<img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-37.3%25-3178c6?style=flat-square&logo=typescript&logoColor=white">
+<img alt="CSS" src="https://img.shields.io/badge/CSS-8.9%25-663399?style=flat-square&logo=css">
+<img alt="JavaScript" src="https://img.shields.io/badge/JavaScript-2.6%25-f7df1e?style=flat-square&logo=javascript&logoColor=black">
+
 </div>
 
 ## About
