@@ -1,86 +1,60 @@
+<div align="center">
+
 # Placebo
 
-Co-watching desktop app built with Tauri 2 + React + TypeScript + Rust.
+**Десктопное social-приложение на Tauri, React и Rust**
 
-## Prerequisites
+Пространство для комнат, профилей, избранного контента и пользовательского взаимодействия.
 
-- [Node.js](https://nodejs.org/) 18+
-- [Rust](https://rustup.rs/) (stable)
-- [Tauri prerequisites](https://tauri.app/start/prerequisites/) for your OS
+<a href="./README.md">
+  <img alt="RU" src="https://img.shields.io/badge/README-RU-2f80ed?style=for-the-badge">
+</a>
+<a href="./README.en.md">
+  <img alt="EN" src="https://img.shields.io/badge/README-EN-111827?style=for-the-badge">
+</a>
 
-### Windows
-```
-winget install Microsoft.VisualStudio.2022.BuildTools
-winget install Microsoft.WebView2Runtime
-```
+<br><br>
 
-### macOS
-```
-xcode-select --install
-```
+<img alt="Rust" src="https://img.shields.io/badge/Rust-47.4%25-black?style=flat-square&logo=rust">
+<img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-37.3%25-3178c6?style=flat-square&logo=typescript&logoColor=white">
+<img alt="CSS" src="https://img.shields.io/badge/CSS-8.9%25-663399?style=flat-square&logo=css">
+<img alt="JavaScript" src="https://img.shields.io/badge/JavaScript-2.6%25-f7df1e?style=flat-square&logo=javascript&logoColor=black">
 
-## Setup
+</div>
+
+## О проекте
+
+**Placebo** — это десктопное приложение, построенное вокруг идеи пользовательских комнат, профилей и персонального контента.
+
+Проект сочетает легкий frontend на **React + TypeScript** с backend-частью на **Rust** через **Tauri**. Такой стек позволяет сохранить современный пользовательский интерфейс, высокую производительность и компактную десктопную сборку.
+
+## Основные возможности
+
+- Главный экран с избранными элементами и популярными комнатами.
+- Профиль пользователя с аватаром, подпиской и сеткой публикаций.
+- Навигация между основными разделами приложения.
+- Rust-команды для работы с пользовательской сессией и комнатами.
+- Основа для расширения: каталог, создание комнат, друзья и дальнейшая социальная логика.
+
+## Технологический стек
+
+| Layer | Technologies |
+|---|---|
+| Desktop runtime | Tauri |
+| Backend | Rust |
+| Frontend | React, TypeScript |
+| Styling | CSS |
+| Build tooling | Vite, npm |
+| Database logic | PLpgSQL |
+
+## Быстрый старт
 
 ```bash
-# 1. Install JS deps
+# 1. Установить зависимости
 npm install
 
-# 2. Run in dev mode (opens the app window)
+# 2. Запустить приложение в режиме разработки
 npm run tauri dev
 
-# 3. Build for production
+# 3. Собрать production-версию
 npm run tauri build
-```
-
-## Project Structure
-
-```
-placebo/
-├── src/                      ← React frontend
-│   ├── main.tsx              ← Entry point
-│   ├── App.tsx               ← Root + screen router
-│   ├── App.css               ← Design system + all styles
-│   ├── components/
-│   │   ├── BottomNav.tsx     ← Navigation bar (5 tabs)
-│   │   └── Icons.tsx         ← All SVG icons
-│   └── screens/
-│       ├── HomeScreen.tsx    ← Главная (favorites + popular rooms)
-│       ├── ProfileScreen.tsx ← Профиль (avatar, posts grid)
-│       ├── ExploreScreen.tsx ← Каталог (stub)
-│       ├── CreateScreen.tsx  ← Создать комнату (stub)
-│       └── FriendsScreen.tsx ← Друзья (stub)
-│
-├── src-tauri/                ← Rust backend
-│   ├── src/
-│   │   ├── main.rs           ← Binary entry point
-│   │   └── lib.rs            ← Tauri commands + state
-│   ├── capabilities/
-│   │   └── default.json      ← App permissions
-│   ├── Cargo.toml
-│   ├── build.rs
-│   └── tauri.conf.json       ← Window config, bundle settings
-│
-├── index.html
-├── vite.config.ts
-├── tsconfig.json
-└── package.json
-```
-
-## Screens Status
-
-| Screen   | Status      | Notes                         |
-|----------|-------------|-------------------------------|
-| Главная  | ✅ Ready    | Favorites grid + room cards   |
-| Профиль  | ✅ Ready    | Avatar, follow, posts grid    |
-| Каталог  | 🔲 Stub     | Next to implement             |
-| Создать  | 🔲 Stub     | Form for room creation        |
-| Друзья   | 🔲 Stub     | Friends list                  |
-
-## Rust Commands Available
-
-| Command           | Description                        |
-|-------------------|------------------------------------|
-| `greet`           | Test hello                         |
-| `get_user_id`     | Returns current user session ID    |
-| `get_public_rooms`| Returns list of public rooms       |
-| `create_room`     | Creates a new room (returns Room)  |
