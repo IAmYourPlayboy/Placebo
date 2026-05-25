@@ -1,7 +1,7 @@
 import { JSX } from "react";
 import { Navigate, RouteObject } from "react-router-dom";
 import { AuthGuard } from "../auth/AuthGuard";
-import HomePlaceholder from "../screens/main/HomePlaceholder";
+import HomeScreen from "../screens/main/HomeScreen";
 import NotificationsScreen from "../screens/skeletons/NotificationsScreen";
 import HistoryScreen from "../screens/skeletons/HistoryScreen";
 import FavoritesScreen from "../screens/skeletons/FavoritesScreen";
@@ -13,11 +13,12 @@ import WelcomeScreen from "../screens/auth/WelcomeScreen";
 import RegisterScreen from "../screens/auth/RegisterScreen";
 import LoginScreen from "../screens/auth/LoginScreen";
 
+import CategoriesScreen from "../screens/categories/CategoriesScreen";
+import World3DScreen from "../screens/world/World3DScreen";
+
 // Старые экраны-прототипы: продолжают работать до момента своего переписывания.
-import ExploreScreen from "../screens/ExploreScreen";
 import CreateScreen from "../screens/CreateScreen";
 import WatchRoomScreen from "../screens/WatchRoomScreen";
-import World3DScreen from "../screens/World3DScreen";
 
 /**
  * Wrap a route element with AuthGuard. Anonymous visitors are redirected to /welcome;
@@ -33,8 +34,8 @@ export const routes: RouteObject[] = [
   { path: "/login", element: <LoginScreen /> },
 
   { path: "/", element: <Navigate to="/home" replace /> },
-  { path: "/home", element: guarded(<HomePlaceholder />) },
-  { path: "/categories", element: guarded(<ExploreScreen />) },
+  { path: "/home", element: guarded(<HomeScreen />) },
+  { path: "/categories", element: guarded(<CategoriesScreen />) },
   { path: "/create", element: guarded(<CreateScreen />) },
   { path: "/people", element: guarded(<PeopleScreen />) },
   { path: "/notifications", element: guarded(<NotificationsScreen />) },
@@ -44,10 +45,11 @@ export const routes: RouteObject[] = [
   { path: "/settings", element: guarded(<SettingsScreen />) },
   { path: "/profile", element: guarded(<ProfilePlaceholder />) },
   { path: "/profile/:username", element: guarded(<ProfilePlaceholder />) },
-  // TODO(M5/M4): WatchRoomScreen и World3DScreen ждут onBack. window.history.back()
-  // дёргает историю Tauri webview, а не per-tab MemoryRouter, поэтому в рамках shell
-  // это no-op. Эти экраны переписываются в M4/M5 на useNavigate(-1) – тогда проп уйдёт.
+  // TODO(M5): WatchRoomScreen ждёт onBack. window.history.back() дёргает историю
+  // Tauri webview, а не per-tab MemoryRouter, поэтому в рамках shell это no-op.
+  // Этот экран переписывается в M5 на useNavigate(-1) – тогда проп уйдёт.
   { path: "/room/:id", element: guarded(<WatchRoomScreen onBack={() => window.history.back()} />) },
-  { path: "/world", element: guarded(<World3DScreen onBack={() => window.history.back()} />) },
+  { path: "/world", element: guarded(<World3DScreen />) },
+  { path: "/world/:id", element: guarded(<World3DScreen />) },
   { path: "*", element: <Navigate to="/home" replace /> },
 ];

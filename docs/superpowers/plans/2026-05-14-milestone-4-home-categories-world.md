@@ -2,14 +2,16 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans. Steps use checkbox (`- [ ]`) syntax.
 
-**Goal:** Переписать Home и Categories по Figma, интегрировать существующий World3DScreen в shell через общий `GlobalCanvas` (виртуализация WebGL), переключить 3D-мир на реальные камеры из API. В конце milestone пользователь проходит Main → Categories → Онлайн карта мира → клик маркер → видит живой HLS-стрим в 3D.
+**Goal:** Переписать Home и Categories по Figma, интегрировать существующий World3DScreen в shell, переключить 3D-мир на реальные камеры из API. В конце milestone пользователь проходит Main → Categories → Онлайн карта мира → клик маркер → видит живой HLS-стрим в 3D.
 
 **Architecture:**
 - `HomeScreen` (по Figma): аватар пользователя, "Открытые комнаты" (горизонтальные кружки с + и аватаром), "Популярное сейчас" (сетка карточек), боковой блок с быстрыми ссылками (Видеоигры, Фильмы, Стримы вне дома, Бравл старс – в альфе просто текст). Данные загружаются параллельно: комнаты через `GET /rooms?open=true` (эндпоинт подготовим-заглушку в M4, реализация роллирующих данных – M5), популярные комнаты – placeholder список, фактический сигнал "сколько людей смотрит" берётся из viewer-count эндпоинта в М5.
 - `CategoriesScreen` (по Figma): тайлы с разными категориями. В альфе работает один – "Онлайн карта мира", остальные – disabled-tile с toast "Скоро".
-- `World3DScreen` переписывается на **driven-by-GlobalCanvas** архитектуру: сцена регистрируется в `Scene3DRegistry`, `<Canvas>` не создаётся внутри экрана, а порталом добавляется в `GlobalCanvas`.
-- **Камеры в 3D**: `useCamerasFromApi()` из M3 подключается вместо `useNearbyCameras` mock.
-- **HLS-плеер в 3D**: `CameraFrustum` обновляется на URL `/api/v1/hls-proxy/:slug` вместо dev-middleware.
+- `World3DScreen` остаётся как сейчас – `<Canvas>` живёт **внутри** экрана. `GlobalCanvas` остаётся stub-ом (deferred decision: portal-based виртуализация откладывается до M7+, см. Task 2).
+- **Камеры в 3D**: `useCamerasFromApi()` из M3 заменяет `useNearbyCameras` mock. Адаптер `cameraResponseToCamera3D()` маппит `CameraResponse` (плоские поля) в `Camera3D` (с `orientation`-объектом и `hlsUrl`), чтобы `WorldScene` остался без изменений сигнатуры.
+- **HLS-плеер в 3D**: URL берётся из `CameraResponse.proxyManifestUrl` (`/api/v1/hls-proxy/:slug`), `CameraFrustum` его получает через `Camera3D.hlsUrl` как раньше.
+
+**Note on existing types:** план опирается на реальный ts-rs тип `CameraResponse` (после M3) – `CameraSummary` упоминается в более ранних драфтах, но такого типа в `src/types/api/` нет.
 
 **Tech Stack:** React Three Fiber, drei, hls.js, react-router-dom, i18n.
 
@@ -29,145 +31,85 @@
 - `src/screens/categories/categories.css`
 - `src/screens/world/World3DScreen.tsx` (в новом месте, старый `src/screens/World3DScreen.tsx` удаляется)
 - `src/screens/world/CameraDetailPanel.tsx` (боковая панель с инфо по камере)
-- `src/shell/scene3d/useScene3D.ts` (хук регистрации сцены)
-- `src/shell/scene3d/GlobalCanvas.tsx` (переписывается – теперь с реальным `<Canvas>`)
+- `src/screens/world/world.css`
+- `src/components/ui/Toast.tsx` + `src/components/ui/toast.css`
+- `src/api/camera3d.ts` – адаптер `cameraResponseToCamera3D(c: CameraResponse): Camera3D`.
 
 ### Modify
 
-- `src/shell/routes.tsx` – `/home` → `HomeScreen`, `/categories` → `CategoriesScreen`, `/world` → новый `World3DScreen`, убрать `/world` как старый компонент.
-- `src/components/world3d/CameraFrustum.tsx` – HLS URL через API.
-- `src/components/world3d/WorldScene.tsx` – работает внутри общего Canvas, не своего.
-- `src/hooks/useNearbyCameras.ts` – deprecate (удалить).
+- `src/shell/routes.tsx` – `/home` → `HomeScreen`, `/categories` → `CategoriesScreen`, `/world` → новый `World3DScreen`, убрать старый импорт.
+- `src/App.tsx` – добавить `ToastProvider` рядом с `ThemeProvider`.
 - `src/i18n/locales/ru.json` – ключи home/categories/world.
+- `docs/superpowers/specs/2026-05-14-alpha-design.md` – пункт в §10 про deferred GlobalCanvas virtualization.
+
+### NOT modified (важно)
+
+- `src/components/world3d/WorldScene.tsx` – остаётся 1:1 как сейчас (принимает `Camera3D`/`Camera3D[]`, своя `<Canvas>`). Адаптер на стороне screen-а конвертирует `CameraResponse` → `Camera3D`.
+- `src/components/world3d/CameraFrustum.tsx` – тоже без изменений; HLS URL приходит в `Camera3D.hlsUrl`, который заполняется адаптером из `CameraResponse.proxyManifestUrl`.
+- `src/shell/scene3d/GlobalCanvas.tsx` – остаётся пустым stub-ом (Task 2 фиксирует это решение).
+- `src/hooks/useCamerasFromApi.ts` – уже создан в M3, в M4 только используется.
 
 ### Delete
 
 - `src/screens/World3DScreen.tsx` (перенесли в `screens/world/`)
-- `src/screens/HomeScreen.tsx` (заменили на `screens/main/HomeScreen.tsx`)
-- `src/screens/ExploreScreen.tsx` (заменили на `screens/categories/CategoriesScreen.tsx`)
+- `src/screens/HomeScreen.tsx` (старый прототип, заменяется на `screens/main/HomeScreen.tsx`)
+- `src/screens/ExploreScreen.tsx` (заменяется на `screens/categories/CategoriesScreen.tsx`)
 - `src/screens/main/HomePlaceholder.tsx`
+- `src/hooks/useNearbyCameras.ts` (mock больше не нужен)
 - `src/screens/WatchRoomScreen.tsx` старый – **не удаляем в M4**, это M5.
 
 ---
 
 ## Task 1: Ветка
 
+Ветка `feat/m4-home-categories-world` уже создана от свежего main и содержит черри-пик `7c04a09` (docs про gh-PAT + YouTube anti-bot, остался от M3-PR). Этот коммит – первый в M4-ветке, дополнительных шагов не нужно.
+
+- [ ] **Step 1: Sanity check**
+
 ```bash
-git -C d:/Projects/Placebo checkout main && git -C d:/Projects/Placebo pull
-git -C d:/Projects/Placebo checkout -b feat/m4-home-categories-world
+git -C d:/Projects/Placebo branch --show-current
+# expected: feat/m4-home-categories-world
+git -C d:/Projects/Placebo log --oneline origin/main..HEAD
+# expected: 70277ad docs: note gh-PAT scope + YouTube anti-bot...
 ```
 
 ---
 
-## Task 2: Переписать GlobalCanvas на R3F + реестр
+## Task 2: GlobalCanvas остаётся stub-ом + spec note
+
+**Решение:** в альфе НЕ виртуализируем 3D-canvas через portal. Canvas живёт внутри `World3DScreen` (как сейчас). Когда таб неактивен – таб скрыт через CSS, R3F автоматически останавливает render-loop. Открытие двух табов с `/world` одновременно даст два WebGL-контекста; считаем это acceptable для альфы (в M7 пересмотрим).
 
 **Files:**
-- Modify: `src/shell/scene3d/GlobalCanvas.tsx`
-- Create: `src/shell/scene3d/useScene3D.ts`
-- Modify: `src/shell/scene3d/Scene3DRegistry.tsx` (+ activeScene children)
+- Modify: `src/shell/scene3d/GlobalCanvas.tsx` (если ещё не stub – привести к stub-у)
+- Modify: `docs/superpowers/specs/2026-05-14-alpha-design.md` (Deferred decisions §10)
 
-- [ ] **Step 1: Сцена-контейнер**
+- [ ] **Step 1: Убедиться что `GlobalCanvas` – stub**
 
-Расширить registry, чтобы хранить не только id, но и `ReactNode` активной сцены:
-
-```tsx
-// Scene3DRegistry.tsx – дополнить
-type RegistryApi = {
-  activeSceneId: string | null;
-  activeSceneNode: ReactNode | null;
-  setActiveScene(id: string | null, node: ReactNode | null): void;
-};
-
-export function Scene3DRegistry({ children }: { children: ReactNode }) {
-  const [activeSceneId, setActiveSceneId] = useState<string | null>(null);
-  const [activeSceneNode, setActiveSceneNode] = useState<ReactNode | null>(null);
-
-  const setActiveScene = useCallback((id: string | null, node: ReactNode | null) => {
-    setActiveSceneId(id);
-    setActiveSceneNode(node);
-  }, []);
-
-  const api = useMemo<RegistryApi>(() => ({ activeSceneId, activeSceneNode, setActiveScene }),
-    [activeSceneId, activeSceneNode, setActiveScene]);
-  return <Scene3DContext.Provider value={api}>{children}</Scene3DContext.Provider>;
-}
-```
-
-- [ ] **Step 2: useScene3D – хук регистрации**
-
-```ts
-// src/shell/scene3d/useScene3D.ts
-import { ReactNode, useEffect, useRef } from "react";
-import { useScene3D as useRegistry } from "./Scene3DRegistry";
-
-export function useActiveScene(id: string, node: ReactNode) {
-  const { setActiveScene } = useRegistry();
-  const nodeRef = useRef(node);
-  nodeRef.current = node;
-
-  useEffect(() => {
-    setActiveScene(id, nodeRef.current);
-    return () => setActiveScene(null, null);
-  }, [id, setActiveScene]);
-}
-```
-
-- [ ] **Step 3: GlobalCanvas с R3F**
+Читаем текущий файл. Если он уже `export default function GlobalCanvas() { return null; }` – ничего не трогаем. Если там осталась попытка реальной реализации, сводим к:
 
 ```tsx
 // src/shell/scene3d/GlobalCanvas.tsx
-import { Canvas } from "@react-three/fiber";
-import { useScene3D as useRegistry } from "./Scene3DRegistry";
-
-export default function GlobalCanvas() {
-  const { activeSceneId, activeSceneNode } = useRegistry();
-  if (!activeSceneId || !activeSceneNode) return null;
-  return (
-    <div className="global-canvas">
-      <Canvas camera={{ position: [0, 30, 60], fov: 55 }} dpr={[1, 1.5]} frameloop="always">
-        {activeSceneNode}
-      </Canvas>
-    </div>
-  );
-}
-```
-
-CSS (обновить):
-
-```css
-.global-canvas {
-  position: absolute; inset: 0;
-  /* Rendered behind UI; scenes enable pointer-events on their own meshes */
-  pointer-events: auto;
-  z-index: 0;
-}
-```
-
-И нужно сделать так, чтобы shell-content имел `z-index: 1` поверх canvas-а **только тогда, когда активная сцена не требует canvas'а на экране**. Проще всего: `GlobalCanvas` находится **внутри** активной страницы World3D как backdrop. Но план выше делает его глобальным. Выбираем более простой вариант: GlobalCanvas рендерится **внутри `WorldScreen`**, а не в ShellRoot. Это отличается от раздела 5.3 спеки, где canvas один на всё приложение; делаем компромиссное решение для альфы:
-
-**Решение для альфы:** `GlobalCanvas` сохранён как концепт (для M5-M6, когда potentially будет несколько 3D-мест). В M4 он рендерится **только когда активная сцена есть** и **только если активный таб открыт на `/world`**. Реально – сцена живёт внутри `World3DScreen`, но через useActiveScene регистрирует себя, и `GlobalCanvas` рендерит её на ShellRoot-уровне. Это отвязывает жизненный цикл Canvas'а от текущего таба: при переключении на другой таб 3D-canvas уходит из DOM, при возврате – монтируется обратно. Состояние сцены (позиция камеры и т.д.) сохраняется **внутри** сцены через хуки, пока сцена-ноде активна в React-дереве.
-
-**Более честный вариант** – в M4 Canvas монтируется в `WorldScene` как обычно, а виртуализация откладывается. Делаем так:
-
-```tsx
-// Упрощённый GlobalCanvas – остаётся пустым, не рендерит ничего.
+/**
+ * Stub. Portal-based 3D canvas virtualization is a deferred decision
+ * (alpha-design.md §10). For the alpha, each World3DScreen owns its
+ * own R3F <Canvas> directly; this component intentionally renders
+ * nothing.
+ */
 export default function GlobalCanvas() {
   return null;
 }
 ```
 
-И пересмотр архитектуры: **3D canvas живёт внутри `World3DScreen`, как было раньше в коде**. Когда таб неактивен → scene CSS hidden → canvas стоп-кадр. Когда таб активен → canvas рендерит. Это избавляет от сложного portal-solution и работает прямо сейчас. Ограничение: **один таб может активно рендерить 3D**. Открытие двух табов с `/world` одновременно = два canvas'а = два WebGL-контекста. В альфе считаем это acceptable. В M7 можно вернуться и заложить portal-based GlobalCanvas, если возникнут проблемы с памятью.
+- [ ] **Step 2: Добавить пункт в Deferred Decisions спеки**
 
-- [ ] **Step 4: Зафиксировать "без виртуализации для альфы" в заметке**
+В `docs/superpowers/specs/2026-05-14-alpha-design.md` в раздел 10 (Deferred Decisions) добавить пункт:
 
-Добавить в `docs/superpowers/specs/2026-05-14-alpha-design.md` в раздел 10 (Deferred Decisions) пункт:
+> **3D-виртуализация через GlobalCanvas + React portal.** В альфе сцены живут внутри своих screen-компонентов (классический R3F `<Canvas>`). Portal-based virtualization отложена до M7 или пост-альфы; ограничение – не открывать два таба с `/world` одновременно (получим два WebGL-контекста).
 
-> 11. **3D-виртуализация через GlobalCanvas + React portal.** В M4 сцены живут внутри своих screen-компонентов (классический R3F `<Canvas>`). Portal-based virtualization отложена до M7 или пост-альфы; ограничение – не открывать два таба с `/world` одновременно.
-
-- [ ] **Step 5: Commit**
+- [ ] **Step 3: Commit**
 
 ```bash
-git add src/shell/scene3d/ docs/superpowers/specs/2026-05-14-alpha-design.md
+git add src/shell/scene3d/GlobalCanvas.tsx docs/superpowers/specs/2026-05-14-alpha-design.md
 git commit -m "chore(3d): defer GlobalCanvas virtualization; scenes stay inside screens for alpha"
 ```
 
@@ -368,7 +310,10 @@ rm d:/Projects/Placebo/src/screens/main/HomePlaceholder.tsx
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/screens/main/ src/shell/routes.tsx src/i18n/locales/ru.json
+git add src/screens/main/HomeScreen.tsx src/screens/main/home.css \
+        src/shell/routes.tsx \
+        src/i18n/locales/ru.json
+git add -u src/screens/main/HomePlaceholder.tsx
 git commit -m "feat(home): HomeScreen per Figma (mock popular rooms)"
 ```
 
@@ -484,7 +429,12 @@ export default function CategoriesScreen() {
       <h2 className="cats__section">{t("categories.world_section")}</h2>
       <div className="cats__world">
         {world.map((tile) => (
-          <button key={tile.key} className={`cats__tile cats__tile--${tile.variant}`} onClick={() => click(tile)} disabled={!tile.enabled && false}>
+          <button
+            key={tile.key}
+            className={`cats__tile cats__tile--${tile.variant}${tile.enabled ? "" : " cats__tile--disabled"}`}
+            onClick={() => click(tile)}
+            aria-disabled={!tile.enabled}
+          >
             <span className="cats__tile-title">{tile.title}</span>
           </button>
         ))}
@@ -508,23 +458,26 @@ export default function CategoriesScreen() {
 ```css
 .cats { padding: 24px 32px; }
 .cats__section { font-size: 18px; font-weight: 600; color: var(--t1); margin: 16px 0; }
+
+/* Alpha layout: 7 tiles in a responsive grid without named areas.
+   Hero tiles span 2 columns / 2 rows, small ones – 1 cell. The Figma
+   mock uses irregular sizes, but a uniform grid is good enough for the
+   alpha and saves us the named-areas hack. */
 .cats__world {
   display: grid;
-  grid-template-columns: 2fr 1fr 1fr 1fr 1fr;
-  grid-template-rows: 1fr 1fr;
-  grid-template-areas:
-    "a b b c d"
-    "a b b e f";
-  gap: 16px; min-height: 360px;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
 }
-.cats__world > :nth-child(1) { grid-area: a; }
-.cats__world > :nth-child(2) { grid-area: b; }
-.cats__world > :nth-child(3) { grid-area: b; display: none; } /* Figma: third hero is adjacent; simplified here */
-/* Simpler 3-column grid fallback for alpha: */
+.cats__tile--hero-sky,
+.cats__tile--hero-blue,
+.cats__tile--hero-orange { grid-column: span 2; grid-row: span 2; }
 @media (max-width: 1100px) {
-  .cats__world { grid-template-columns: repeat(3, 1fr); grid-template-areas: none; grid-template-rows: auto; }
-  .cats__world > * { grid-area: auto !important; }
+  .cats__world { grid-template-columns: repeat(2, 1fr); }
+  .cats__tile--hero-sky,
+  .cats__tile--hero-blue,
+  .cats__tile--hero-orange { grid-column: span 2; grid-row: auto; }
 }
+
 .cats__chill { display: grid; grid-template-columns: repeat(6, 1fr); gap: 16px; }
 @media (max-width: 1100px) { .cats__chill { grid-template-columns: repeat(3, 1fr); } }
 
@@ -532,7 +485,10 @@ export default function CategoriesScreen() {
   min-height: 140px; border-radius: 16px; border: 0; padding: 16px;
   cursor: pointer; display: flex; align-items: flex-end; text-align: left;
   color: var(--t1); font-weight: 700; font-size: 18px; overflow: hidden; position: relative;
+  transition: transform 120ms ease;
 }
+.cats__tile:hover:not(.cats__tile--disabled) { transform: translateY(-2px); }
+.cats__tile--disabled { cursor: pointer; opacity: 0.85; }
 .cats__tile--hero-sky    { background: linear-gradient(160deg,#03121f,#0a1f33 40%,#3b6a3b); color: #fff; min-height: 220px; }
 .cats__tile--hero-blue   { background: linear-gradient(170deg,#72b3d6,#7cb6d4 50%,#3b7ea3); color: #fff; min-height: 220px; }
 .cats__tile--hero-orange { background: linear-gradient(170deg,#7a5af8,#ffa45a 90%); color: #fff; min-height: 220px; }
@@ -601,10 +557,16 @@ import { ToastProvider } from "./components/ui/Toast";
 
 - [ ] **Step 7: Commit**
 
+Удаляем старый `ExploreScreen` и стейджим только то, что относится к этому таску – никакого `git add -A`.
+
 ```bash
-git add src/screens/categories/ src/components/ui/Toast.tsx src/App.tsx src/App.css src/shell/routes.tsx src/i18n/locales/ru.json
-rm -f src/screens/ExploreScreen.tsx
-git add -A
+rm d:/Projects/Placebo/src/screens/ExploreScreen.tsx
+git add src/screens/categories/ \
+        src/components/ui/Toast.tsx src/components/ui/toast.css \
+        src/App.tsx src/App.css \
+        src/shell/routes.tsx \
+        src/i18n/locales/ru.json
+git add -u src/screens/ExploreScreen.tsx
 git commit -m "feat(categories): Categories screen per Figma, toast for disabled tiles"
 ```
 
@@ -613,86 +575,154 @@ git commit -m "feat(categories): Categories screen per Figma, toast for disabled
 ## Task 5: World3DScreen в shell
 
 **Files:**
-- Create: `src/screens/world/World3DScreen.tsx`
-- Create: `src/screens/world/CameraDetailPanel.tsx`
-- Modify: `src/components/world3d/WorldScene.tsx` (теперь принимает камеры пропсом)
-- Modify: `src/components/world3d/CameraFrustum.tsx` (HLS URL через API)
-- Delete: старый `src/screens/World3DScreen.tsx`
+- Create: `src/api/camera3d.ts` (адаптер `CameraResponse → Camera3D`).
+- Create: `src/screens/world/World3DScreen.tsx` + `world.css`.
+- Create: `src/screens/world/CameraDetailPanel.tsx`.
+- Modify: `src/shell/routes.tsx` (новый импорт, убрать `onBack`-проп).
+- Modify: `src/i18n/locales/ru.json`.
+- Delete: `src/screens/World3DScreen.tsx`, `src/hooks/useNearbyCameras.ts`.
 
-- [ ] **Step 1: Перенос и адаптация**
+**НЕ модифицируем:** `src/components/world3d/WorldScene.tsx`, `src/components/world3d/CameraFrustum.tsx` – остаются 1:1 как сейчас.
 
-```bash
-mv d:/Projects/Placebo/src/screens/World3DScreen.tsx d:/Projects/Placebo/src/screens/world/_old_reference.tsx.bak
+- [ ] **Step 1: Адаптер `cameraResponseToCamera3D`**
+
+`WorldScene` принимает локальный тип `Camera3D` (с группой `orientation`, скаляром `heightAboveGround`, полем `hlsUrl`). API даёт плоский `CameraResponse`. Не меняем сигнатуру `WorldScene` – пишем тонкий адаптер.
+
+`src/api/camera3d.ts`:
+
+```ts
+import type { CameraResponse } from "../types/api/CameraResponse";
+import type { Camera3D } from "../types/world3d";
+import { DEFAULT_ORIENTATION } from "../types/world3d";
+
+/**
+ * Map the API camera DTO to the local Camera3D type used by WorldScene.
+ * Fallbacks for orientation / height come from DEFAULT_ORIENTATION (5m / 0° / -15° / 90° / 58°),
+ * matching the legacy mock so visuals do not regress when seed data omits these fields.
+ */
+export function cameraResponseToCamera3D(c: CameraResponse): Camera3D {
+  // Build the absolute HLS URL. proxyManifestUrl is server-relative ("/api/v1/hls-proxy/<slug>"),
+  // and in dev the Vite proxy forwards /api → http://localhost:3001 transparently.
+  // In Tauri prod we will resolve via VITE_API_BASE_URL.
+  const base = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "";
+  const hlsUrl = c.proxyManifestUrl
+    ? base
+      ? `${base.replace(/\/$/, "")}${c.proxyManifestUrl.replace(/^\/api\/v1/, "")}`
+      : c.proxyManifestUrl
+    : null;
+
+  return {
+    id: c.id,
+    name: c.name,
+    slug: c.slug,
+    lat: c.lat,
+    lng: c.lng,
+    category: c.category,
+    heightAboveGround: c.heightAboveGround ?? 5,
+    orientation: {
+      azimuth: c.cameraAzimuth ?? DEFAULT_ORIENTATION.azimuth,
+      elevation: c.cameraElevation ?? DEFAULT_ORIENTATION.elevation,
+      fovHorizontal: c.fovHorizontal ?? DEFAULT_ORIENTATION.fovHorizontal,
+      fovVertical: c.fovVertical ?? DEFAULT_ORIENTATION.fovVertical,
+    },
+    hlsUrl,
+    thumbnailUrl: c.thumbnailUrl ?? null,
+    isOnline: true,            // M5: real signal from /cameras/:id/health.
+    viewersNow: 0,             // M5: real viewer count via Redis hook.
+  };
+}
 ```
 
-(бэкап для сравнения, удалим в конце)
+**Важно:** `VITE_API_BASE_URL` в dev, скорее всего, не задан, и Vite-прокси ловит `/api` → `http://localhost:3001`. Тогда `proxyManifestUrl` (вида `/api/v1/hls-proxy/yt-shibuya-crossing`) уйдёт прямо в `<video>.src` – это работает. Если `VITE_API_BASE_URL=http://localhost:3001` задан, мы убираем `/api/v1` и подменяем им хост, чтобы избежать двойного `/api/v1`. CameraFrustum и его манипуляции `hls.js` менять не надо.
 
 - [ ] **Step 2: Новый World3DScreen**
 
 ```tsx
 // src/screens/world/World3DScreen.tsx
-import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
-import { Canvas } from "@react-three/fiber";
-import WorldScene from "../../components/world3d/WorldScene";
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+import { WorldScene } from "../../components/world3d/WorldScene";
 import CameraDetailPanel from "./CameraDetailPanel";
 import { useCamerasFromApi } from "../../hooks/useCamerasFromApi";
-import type { CameraSummary } from "../../types/api/CameraSummary";
+import { cameraResponseToCamera3D } from "../../api/camera3d";
+import "./world.css";
 
 export default function World3DScreen() {
-  const { data: cameras, loading, error } = useCamerasFromApi();
-  const [active, setActive] = useState<CameraSummary | null>(null);
+  const { data, loading, error } = useCamerasFromApi();
   const { id } = useParams();
   const nav = useNavigate();
+  const { t } = useTranslation();
+  const [activeId, setActiveId] = useState<string | null>(null);
 
+  const cameras = useMemo(() => (data ?? []).map(cameraResponseToCamera3D), [data]);
+
+  // Sync the URL param (slug or id) with active state on mount/data change.
   useEffect(() => {
-    if (!cameras || !id) return;
-    const found = cameras.find((c) => c.id === id || c.slug === id);
-    if (found) setActive(found);
+    if (!cameras.length) return;
+    if (id) {
+      const found = cameras.find((c) => c.slug === id || c.id === id);
+      if (found) {
+        setActiveId(found.id);
+        return;
+      }
+    }
+    setActiveId((prev) => prev ?? cameras[0].id);
   }, [cameras, id]);
 
-  if (loading) return <div style={{ padding: 32 }}>Loading cameras...</div>;
-  if (error) return <div style={{ padding: 32, color: "#D12850" }}>Ошибка: {error.message}</div>;
-  if (!cameras) return null;
+  if (loading) return <div className="world-screen world-screen--loading">{t("world.loading")}</div>;
+  if (error) return <div className="world-screen world-screen--error">{t("world.error", { msg: error.message })}</div>;
+  if (!cameras.length) return <div className="world-screen world-screen--loading">{t("world.empty")}</div>;
+
+  const active = cameras.find((c) => c.id === activeId) ?? cameras[0];
 
   return (
     <div className="world-screen">
-      <div className="world-screen__canvas">
-        <Canvas camera={{ position: [0, 30, 60], fov: 55 }} dpr={[1, 1.5]}>
-          <WorldScene cameras={cameras} activeId={active?.id ?? null} onPickCamera={(c) => {
-            setActive(c);
-            nav(`/world/${c.slug}`, { replace: true });
-          }} />
-        </Canvas>
-      </div>
-      {active && <CameraDetailPanel camera={active} onClose={() => { setActive(null); nav("/world", { replace: true }); }} />}
+      <WorldScene
+        activeCamera={active}
+        nearbyCameras={cameras}
+        onCameraSelect={(cam) => {
+          setActiveId(cam.id);
+          nav(`/world/${cam.slug}`, { replace: true });
+        }}
+        timezone={"UTC"}
+      />
+      <CameraDetailPanel
+        camera={active}
+        onClose={() => nav("/world", { replace: true })}
+      />
     </div>
   );
 }
 ```
 
-CSS (в `App.css` или отдельный):
+`world.css`:
 
 ```css
-.world-screen { position: relative; width: 100%; height: 100%; background: var(--scene-bg); }
-.world-screen__canvas { position: absolute; inset: 0; }
+.world-screen { position: relative; width: 100%; height: 100%; background: #0a0a0f; overflow: hidden; }
+.world-screen--loading,
+.world-screen--error { display: grid; place-items: center; color: var(--t2); padding: 32px; }
+.world-screen--error { color: #D12850; }
 ```
+
+**Important:** `WorldScene` мы НЕ меняем. Он уже принимает `activeCamera`, `nearbyCameras`, `onCameraSelect` именно с такими именами и сам обрабатывает `cam.id !== activeCamera.id` фильтрацию. Просмотрев исходник до начала имплементации, имена пропсов сверить ещё раз.
 
 - [ ] **Step 3: CameraDetailPanel**
 
 ```tsx
-import type { CameraSummary } from "../../types/api/CameraSummary";
+// src/screens/world/CameraDetailPanel.tsx
+import type { Camera3D } from "../../types/world3d";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
-type Props = { camera: CameraSummary; onClose: () => void };
+type Props = { camera: Camera3D; onClose: () => void };
 
 export default function CameraDetailPanel({ camera, onClose }: Props) {
   const { t } = useTranslation();
   const nav = useNavigate();
 
   const watchTogether = () => {
-    // Flow: create room via API (M5) and navigate; until then use placeholder.
+    // M5 will create a real room via API; for now route to the existing CreateScreen with camera id.
     nav(`/create?camera=${camera.id}`);
   };
 
@@ -701,9 +731,9 @@ export default function CameraDetailPanel({ camera, onClose }: Props) {
       <div className="world-panel__head">
         <div>
           <div className="world-panel__title">{camera.name}</div>
-          <div className="world-panel__subtitle">{camera.city}, {camera.country}</div>
+          <div className="world-panel__subtitle">{camera.category}</div>
         </div>
-        <button onClick={onClose} aria-label="close">✕</button>
+        <button className="world-panel__close" onClick={onClose} aria-label={t("world.close")}>✕</button>
       </div>
       <button className="world-panel__watch" onClick={watchTogether}>
         {t("world.watch_together")}
@@ -713,7 +743,9 @@ export default function CameraDetailPanel({ camera, onClose }: Props) {
 }
 ```
 
-CSS:
+Панель использует `Camera3D` (после адаптации). `city`/`country` тут нет – мы их потеряли в адаптере; если хочется показывать локацию, расширим `Camera3D` отдельным полем `location?: string` в M5. Для альфы достаточно `name` + `category`.
+
+CSS дополнить в `world.css`:
 
 ```css
 .world-panel {
@@ -721,10 +753,15 @@ CSS:
   width: 320px; background: var(--bg); color: var(--t1);
   border-radius: 16px; border: 1px solid var(--border);
   padding: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+  z-index: 10;
 }
-.world-panel__head { display: flex; justify-content: space-between; align-items: flex-start; }
+.world-panel__head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
 .world-panel__title { font-size: 18px; font-weight: 700; }
-.world-panel__subtitle { color: var(--t2); font-size: 13px; }
+.world-panel__subtitle { color: var(--t2); font-size: 13px; text-transform: capitalize; }
+.world-panel__close {
+  background: transparent; border: 0; color: var(--t2);
+  font-size: 18px; cursor: pointer; padding: 4px 8px;
+}
 .world-panel__watch {
   margin-top: 16px; width: 100%; padding: 12px;
   background: var(--accent); color: #fff; border: 0; border-radius: 10px;
@@ -732,83 +769,61 @@ CSS:
 }
 ```
 
-- [ ] **Step 4: WorldScene и CameraFrustum обновления**
+- [ ] **Step 4: Route**
 
-Текущий `WorldScene.tsx` получает камеры через хук, но нам нужно чтобы сцена принимала их как проп – для явной зависимости от API.
-
-Основные изменения в `WorldScene.tsx`:
-
-```tsx
-import type { CameraSummary } from "../../types/api/CameraSummary";
-
-type Props = {
-  cameras: CameraSummary[];
-  activeId: string | null;
-  onPickCamera: (cam: CameraSummary) => void;
-};
-
-export default function WorldScene({ cameras, activeId, onPickCamera }: Props) {
-  // Use cameras directly; origin = active camera position for lat/lng→XZ conversion.
-  const active = cameras.find((c) => c.id === activeId) ?? cameras[0];
-  // ... existing scene setup, passing `cameras`, `active`, and `onPickCamera` down to markers/frustum
-}
-```
-
-В `CameraFrustum.tsx` заменить `streamUrl` на `/api/v1/hls-proxy/${camera.slug}` через env:
-
-```tsx
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:3001/api/v1";
-const hlsUrl = `${API_BASE.replace(/\/api\/v1$/, "")}/api/v1/hls-proxy/${camera.slug}`;
-// Или если API_BASE уже содержит /api/v1 – можно просто `${API_BASE}/hls-proxy/${camera.slug}`.
-```
-
-- [ ] **Step 5: Route + удалить старый**
+`src/shell/routes.tsx`:
 
 ```tsx
 import World3DScreen from "../screens/world/World3DScreen";
-// ...
+// убрать старый импорт `import World3DScreen from "../screens/World3DScreen"`
+// убрать `onBack`-проп
 { path: "/world", element: guarded(<World3DScreen />) },
 { path: "/world/:id", element: guarded(<World3DScreen />) },
 ```
 
-Удалить старый файл:
+- [ ] **Step 5: i18n**
 
-```bash
-rm d:/Projects/Placebo/src/screens/world/_old_reference.tsx.bak
-```
-
-- [ ] **Step 6: i18n**
+`src/i18n/locales/ru.json`:
 
 ```json
-"world.watch_together": "Смотреть вместе"
+"world.watch_together": "Смотреть вместе",
+"world.close": "Закрыть",
+"world.loading": "Загружаем камеры...",
+"world.empty": "Нет камер для отображения",
+"world.error": "Не удалось загрузить камеры: {{msg}}"
 ```
 
-- [ ] **Step 7: Удалить useNearbyCameras**
+- [ ] **Step 6: Удалить мёртвые файлы**
 
 ```bash
+rm d:/Projects/Placebo/src/screens/World3DScreen.tsx
 rm d:/Projects/Placebo/src/hooks/useNearbyCameras.ts
+# Проверить, что никто не ссылается:
+grep -rn "useNearbyCameras\|screens/World3DScreen" d:/Projects/Placebo/src/
+# expected: пусто
 ```
 
-Проверить, что на него никто больше не ссылается:
+- [ ] **Step 7: Commit**
 
 ```bash
-grep -rn "useNearbyCameras" d:/Projects/Placebo/src/
-```
-
-Expected: ничего.
-
-- [ ] **Step 8: Commit**
-
-```bash
-git add -A
+git add src/api/camera3d.ts \
+        src/screens/world/ \
+        src/shell/routes.tsx \
+        src/i18n/locales/ru.json
+git add -u src/screens/World3DScreen.tsx src/hooks/useNearbyCameras.ts
 git commit -m "$(cat <<'EOF'
 feat(world): World3DScreen driven by /cameras API + HLS proxy
 
-- Cameras come from useCamerasFromApi (real CameraSummary items).
-- CameraDetailPanel opens on marker click with a Watch Together button
-  (routes to /create?camera=... until M5 room creation lands).
-- CameraFrustum uses /api/v1/hls-proxy/:slug for HLS playback.
-- Removed the legacy useNearbyCameras mock.
+- New cameraResponseToCamera3D adapter maps the API DTO to the local
+  Camera3D type WorldScene expects, leaving WorldScene untouched.
+- World3DScreen now lives under src/screens/world/, reads /cameras via
+  useCamerasFromApi, and syncs the active camera with the /world/:slug URL.
+- CameraDetailPanel shows name + category and routes "Watch Together"
+  to /create?camera=<id> until M5 lands real room creation.
+- HLS playback flows through the M3 axum proxy via CameraResponse.proxyManifestUrl
+  → Camera3D.hlsUrl; CameraFrustum is unchanged.
+- Legacy useNearbyCameras mock and the old src/screens/World3DScreen.tsx
+  are removed.
 
 Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
 EOF

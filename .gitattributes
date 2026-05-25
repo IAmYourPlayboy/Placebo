@@ -1,0 +1,8 @@
+# Force LF line endings for files whose content is hashed or parsed by
+# tools that care about exact bytes. Without this, Windows autocrlf rewrites
+# checked-out copies to CRLF, which breaks:
+#   - sqlx migration checksums ("migration N was previously applied but has
+#     been modified" on machines that checked out the same commit on Windows).
+#   - tests that compare on-disk file bytes.
+*.sql text eol=lf
+*.sh  text eol=lf

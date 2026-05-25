@@ -157,3 +157,24 @@ rm -rf node_modules/.vite
 
 # 4. Запустить заново (см. пункт 1)
 ```
+
+---
+
+## 6. GitHub CLI (gh) – особенности доступа
+
+`gh auth login` сам по себе **бесполезен** для PR в Placebo: токен,
+который он создаёт по дефолту, не имеет прав на этот репозиторий и
+padает с `Could not resolve to a Repository`.
+
+Для `gh pr create` / `gh pr view` нужен PAT, у которого явно выставлено:
+
+- **Resource owner**: `IAmYourPlayboy`
+- **Repository access**: `Only select repositories` → `Placebo`
+- **Repository permissions**: `Contents: read & write`, `Pull requests: read & write`, `Metadata: read-only`
+
+Или классический token с scope `repo`. Просто `gh auth login` с дефолтным
+fine-grained PAT даст ошибку доступа.
+
+Если `gh` не работает – PR-описание можно писать в локальный `.md`-файл
+и открывать https://github.com/IAmYourPlayboy/Placebo/pull/new/<branch>
+в браузере, копируя body вручную.

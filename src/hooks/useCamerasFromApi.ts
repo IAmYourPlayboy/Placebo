@@ -12,11 +12,14 @@ interface State {
 /**
  * Fetch the camera roster from the placebo-api on mount.
  *
- * Lives next to the M3-era mock-driven `useNearbyCameras` for now;
- * M4 rewires World3D to use this hook (see plan
- * `docs/superpowers/plans/2026-05-14-milestone-4-home-categories-world.md`).
+ * Used by World3DScreen since M4 to drive the 3D map; the legacy
+ * mock-driven `useNearbyCameras` was removed in the same milestone.
+ *
+ * `perPage` is undefined by default so we don't send a redundant query
+ * parameter that matches the server-side default — the API caps results
+ * at 50/page on its own.
  */
-export function useCamerasFromApi(perPage = 50): State {
+export function useCamerasFromApi(perPage?: number): State {
   const [state, setState] = useState<State>({
     data: null,
     error: null,
@@ -25,7 +28,7 @@ export function useCamerasFromApi(perPage = 50): State {
 
   useEffect(() => {
     let cancelled = false;
-    listCameras({ perPage })
+    listCameras(perPage !== undefined ? { perPage } : {})
       .then((response) => {
         if (cancelled) return;
         setState({ data: response.data, error: null, loading: false });

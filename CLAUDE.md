@@ -123,8 +123,8 @@ d:\Projects\Placebo\
 - [x] **M0 Foundation** (2026-05-15): ts-rs pipeline, react-i18next, ThemeProvider, user_preferences IPC, dead-code cleanup.
 - [x] **M1 Shell** (2026-05-16): sidebar, topbar, per-tab memory router, breadcrumbs, theme toggle, skeleton screens, tab persistence.
 - [x] **M2 Auth** (2026-05-17): welcome / register / login, AuthProvider + AuthGuard, OS-keychain token storage, /me endpoint, username + DOB on users.
-- [ ] M3 Cameras seed + HLS proxy.
-- [ ] M4 Home + Categories + World3D in shell.
+- [x] **M3 Cameras seed + HLS proxy** (2026-05-23): migration 009 stream_source_type + 010 alpha seed (13 youtube_live + 5 loop_mp4), axum /api/v1/hls-proxy with yt-dlp + Redis cache, ts-rs CameraResponse + StreamSourceType, vite hls-proxy middleware dropped.
+- [x] **M4 Home + Categories + World3D in shell** (2026-05-25): HomeScreen per Figma (open rooms + popular grid + side rail), CategoriesScreen (1 enabled hero + toast for the rest), World3DScreen reads /cameras via cameraResponseToCamera3D adapter, GlobalCanvas virtualization deferred to M7+.
 - [ ] M5 Rooms + WebSocket + chat.
 - [ ] M6 Profile + Friends + Settings + Create hub.
 - [ ] M7 Polish + acceptance + distribution.
@@ -336,6 +336,12 @@ Pipeline bash-скрипты на Windows запускать через Git Bash
 - Белые плоскости вместо видео = запросы на go2rtc. Убрать `VITE_GO2RTC_URL` из `.env` и `launch.json`.
 - Сегменты 403/410 = истёк YouTube HLS URL → перезапустить Vite (сбросит кеш yt-dlp).
 - Тайлы 502 = не запущен axum API.
+- `gh auth login` сам по себе бесполезен – дефолтный fine-grained PAT не
+  имеет прав на этот репо. Нужен токен с явно выбранным `IAmYourPlayboy/Placebo`
+  и правами `Contents` + `Pull requests` (read & write). Подробности в RUNBOOK §6.
+- YouTube anti-bot блокирует анонимный `yt-dlp -g` (с 2026). С residential
+  IP вернёт `Sign in to confirm you're not a bot`. axum-прокси отрабатывает
+  ошибку как 500+JSON. Пока не решено – планируется EU-VPS для прода.
 
 ---
 
