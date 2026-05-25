@@ -1,0 +1,89 @@
+.cats {
+  padding: 24px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cats__section {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--t1);
+  margin: 16px 0 4px;
+}
+
+/* Heroes span 2 columns/2 rows; small tiles take a single cell. The Figma
+   mock has irregular sizes, but a uniform 4-column grid is good enough for
+   the alpha and avoids brittle named-area tricks. */
+.cats__world {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+.cats__tile--hero-sky,
+.cats__tile--hero-blue,
+.cats__tile--hero-orange {
+  grid-column: span 2;
+  grid-row: span 2;
+}
+@media (max-width: 1100px) {
+  .cats__world { grid-template-columns: repeat(2, 1fr); }
+  .cats__tile--hero-sky,
+  .cats__tile--hero-blue,
+  .cats__tile--hero-orange {
+    grid-column: span 2;
+    grid-row: auto;
+  }
+}
+
+.cats__chill {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 16px;
+}
+@media (max-width: 1100px) {
+  .cats__chill { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 700px) {
+  .cats__chill { grid-template-columns: repeat(2, 1fr); }
+}
+
+.cats__tile {
+  min-height: 140px;
+  border-radius: 16px;
+  border: 0;
+  padding: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: flex-end;
+  text-align: left;
+  color: var(--t1);
+  font-weight: 700;
+  font-size: 18px;
+  overflow: hidden;
+  position: relative;
+  transition: transform 120ms ease, box-shadow 120ms ease;
+}
+.cats__tile:hover:not(.cats__tile--disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
+}
+.cats__tile--disabled {
+  opacity: 0.85;
+}
+
+.cats__tile-title {
+  max-width: 86%;
+  line-height: 1.2;
+}
+
+.cats__tile--hero-sky    { background: linear-gradient(160deg, #03121f, #0a1f33 40%, #3b6a3b); color: #fff; min-height: 220px; }
+.cats__tile--hero-blue   { background: linear-gradient(170deg, #72b3d6, #7cb6d4 50%, #3b7ea3); color: #fff; min-height: 220px; }
+.cats__tile--hero-orange { background: linear-gradient(170deg, #7a5af8, #ffa45a 90%); color: #fff; min-height: 220px; }
+.cats__tile--small-orange      { background: linear-gradient(170deg, #ffb28c, #ff7a45 90%); min-height: 160px; }
+.cats__tile--small-olive       { background: linear-gradient(160deg, #c8bd7a, #6f6a3b 90%); color: #fff; min-height: 160px; }
+.cats__tile--small-pink        { background: linear-gradient(160deg, #d38ec0, #7d3a6c); color: #fff; min-height: 160px; }
+.cats__tile--small-purple      { background: linear-gradient(160deg, #7b5ded, #ff9a55); color: #fff; min-height: 160px; }
+.cats__tile--small-pink-light  { background: linear-gradient(170deg, #ff7abf, #ffb1d4); color: #fff; min-height: 130px; }
+.cats__tile--small-black       { background: #0f0a12; color: #ff3368; min-height: 130px; }
+.cats__tile--small-orange-pale { background: linear-gradient(170deg, #ffcc9f, #ff8f5a); min-height: 130px; }

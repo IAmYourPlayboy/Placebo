@@ -13,8 +13,9 @@ import WelcomeScreen from "../screens/auth/WelcomeScreen";
 import RegisterScreen from "../screens/auth/RegisterScreen";
 import LoginScreen from "../screens/auth/LoginScreen";
 
+import CategoriesScreen from "../screens/categories/CategoriesScreen";
+
 // Старые экраны-прототипы: продолжают работать до момента своего переписывания.
-import ExploreScreen from "../screens/ExploreScreen";
 import CreateScreen from "../screens/CreateScreen";
 import WatchRoomScreen from "../screens/WatchRoomScreen";
 import World3DScreen from "../screens/World3DScreen";
@@ -34,7 +35,7 @@ export const routes: RouteObject[] = [
 
   { path: "/", element: <Navigate to="/home" replace /> },
   { path: "/home", element: guarded(<HomeScreen />) },
-  { path: "/categories", element: guarded(<ExploreScreen />) },
+  { path: "/categories", element: guarded(<CategoriesScreen />) },
   { path: "/create", element: guarded(<CreateScreen />) },
   { path: "/people", element: guarded(<PeopleScreen />) },
   { path: "/notifications", element: guarded(<NotificationsScreen />) },
