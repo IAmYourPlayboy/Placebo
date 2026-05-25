@@ -79,7 +79,7 @@ d:\Projects\Placebo\
 │   │   ├── Sidebar.tsx / BottomNav.tsx / Icons.tsx
 │   │   └── world3d/         ← WorldScene, BuildingsLayer, CameraMarker3D,
 │   │                          CameraFrustum, Environment, NavigationControls
-│   ├── hooks/                ← useNearbyCameras, useCityTiles
+│   ├── hooks/                ← useCamerasFromApi, useCityTiles
 │   ├── screens/              ← Home, Explore, Cameras, Profile, WatchRoom,
 │   │                          Friends, Create, World3DScreen
 │   ├── services/cameras.ts
