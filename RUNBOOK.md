@@ -23,91 +23,126 @@
 ## 1. Запуск 3D мира с видеотрансляциями
 
 **Что нужно запущено:**
-- PostgreSQL 17 (с PostGIS + OSM данные Канто)
+- PostgreSQL 17 + PostGIS (с OSM данными нужного региона)
 - Redis
-- Axum API (порт 3001)
-- Vite dev server (порт 1420)
+- Axum API (порт 3001) – HLS-прокси теперь живёт здесь
+- Vite dev server (порт 1420) либо Tauri dev
+- `yt-dlp` в `PATH` (нужен axum-прокси для разрешения youtube_live)
 
 **Что НЕ нужно:**
-- Docker / go2rtc – заменён на HLS proxy в `vite.config.ts`
+- go2rtc – никогда не использовался в M3+.
+- vite hls-proxy middleware – удалён в M3, всё проксируется через axum.
 
 ### Шаги
 
 ```bash
-# 1. Проверить что PostgreSQL и Redis запущены
-pg_isready
-redis-cli ping
+# 1. Поднять postgres+redis (если ещё не подняты)
+docker compose -f docker-compose.dev.yml up -d
 
-# 2. Запустить axum API (из корня проекта)
-cd placebo-api && cargo run &
+# 2. Запустить axum API
+cd crates/placebo-api && cargo run
 # Ждём "listening on 0.0.0.0:3001"
+#   Миграции 001..010 накатятся автоматически.
 
-# 3. Запустить Vite dev server
+# 3. В отдельном окне – Vite dev (или `npm run tauri dev`)
 npm run dev
-# Откроется на http://localhost:1420
+# Открыть http://localhost:1420
 
-# 4. В браузере: Главная → клик на "Онлайн карта мира"
-# 3D мир загрузится, видео появится через 3–8 сек (буферизация HLS)
+# 4. Login → Категории → "Онлайн карта мира".
+#   3D мир грузится, маркеры камер из /api/v1/cameras (18 шт).
+#   На клик маркера появляется CameraDetailPanel; HLS-плоскость
+#   подтягивает поток через GET /api/v1/hls-proxy/<slug>.
 ```
 
-### Как работает видео
+### Как работает видео (M3+)
 
 ```
-Браузер (hls.js) → /hls-proxy?src=shibuya-crossing (Vite middleware)
+Браузер (hls.js) → GET /api/v1/hls-proxy/<slug>          (axum handler)
                     ↓
-              yt-dlp получает HLS URL от YouTube (кеш 30 мин)
+  resolve <slug> → stream_source_type из БД
+   ├── youtube_live → yt-dlp -g <videoId> (Redis cache 30 мин)
+   ├── direct_hls   → URL из stream_source_config.url
+   └── loop_mp4     → 307 redirect на /static/demo/<asset>/index.m3u8
                     ↓
-              Fetch m3u8 с YouTube CDN
+  m3u8 переписывается: каждая ссылка на сегмент =
+     /api/v1/hls-proxy/<slug>/seg?u=<base64url(absolute-segment-url)>
                     ↓
-              Перезапись URL сегментов через наш прокси (решает CORS)
-                    ↓
-              Браузер качает сегменты через /hls-proxy?src=...&seg=...
+  Браузер запрашивает /seg → axum стримит сегмент upstream
 ```
 
 ### Ключевые файлы
 
 | Файл | Роль |
 |------|------|
-| `vite.config.ts` | HLS proxy middleware (yt-dlp + CORS) |
-| `src/hooks/useNearbyCameras.ts` | Mock камеры с `/hls-proxy` URL |
-| `src/screens/World3DScreen.tsx` | Стартовая камера + `streamUrl()` |
-| `src/components/world3d/CameraFrustum.tsx` | VideoPlane + hls.js логика |
-| `src/hooks/useCityTiles.ts` | Загрузка OSM тайлов (дороги, здания, вода, парки) |
+| `crates/placebo-api/src/handlers/hls_proxy.rs` | manifest() + segment() handlers |
+| `crates/placebo-api/src/services/hls_source.rs` | resolve(slug) + Redis-кеш yt-dlp |
+| `crates/placebo-api/migrations/010_seed_alpha_cameras.sql` | Альфа-сид 13 youtube + 5 demo |
+| `src/hooks/useCamerasFromApi.ts` | Загрузка камер из /api/v1/cameras |
+| `src/api/camera3d.ts` | Адаптер `CameraResponse → Camera3D` |
+| `src/screens/world/World3DScreen.tsx` | Активная камера + URL `/world/:slug` |
+| `src/components/world3d/CameraFrustum.tsx` | VideoPlane + hls.js (без изменений с M2) |
+| `src/hooks/useCityTiles.ts` | OSM-тайлы дорог/зданий/воды/парков |
 
 ### Частые проблемы
 
 | Симптом | Причина | Решение |
 |---------|---------|---------|
-| Белые плоскости вместо видео | Запросы идут на go2rtc (порт 1984) | Убрать `VITE_GO2RTC_URL` из `.env` и `launch.json` |
-| Белый экран при входе в 3D | R3F компоненты крашатся | Проверить маппинг API→frontend в `useCityTiles.ts` (coords→points, width_meters→width) |
-| `stream not found` в консоли | YouTube ID не в словаре | Добавить ID в `YOUTUBE_IDS` в `vite.config.ts` |
-| Сегменты 403/410 | Истёк YouTube HLS URL | Перезапустить Vite (сбросит кеш yt-dlp) |
-| Тайлы 502 / ERR_ABORTED | Axum API не запущен | `cd placebo-api && cargo run` |
+| `Не удалось загрузить камеры: Request failed (400)` | Axum валидирует `?per_page=...` строго; до M4 фикса был баг | Подтянуть main – фикс в `extractors/pagination.rs` (M4 PR #6) |
+| `migration N was previously applied but has been modified` | CRLF/LF расхождение в `.sql` файле (Windows autocrlf) | `.gitattributes` уже фиксирует `*.sql text eol=lf`. Если уже зацепило – `docker compose down -v` + перезапуск (dev volume) |
+| HLS 500 на `yt-shibuya-crossing` (RU IP) | YouTube anti-bot блокирует анонимный yt-dlp | См. CLAUDE.md §16. Решение – EU VPS (вне scope альфы) |
+| Серая плоскость на `demo-*` slug | Нет MP4 в `crates/placebo-api/static/demo/<asset>/` | Сгенерить FFmpeg по инструкции в `crates/placebo-api/static/demo/README.md` |
+| Тайлы 502 / ERR_ABORTED | Axum API не запущен | `cd crates/placebo-api && cargo run` |
 
 ### Требования к системе
 
-- `yt-dlp` установлен и в PATH
-- `hls.js` в зависимостях (`npm install`)
-- Порт 1420 свободен (Vite)
-- Порт 3001 свободен (axum API)
+- `yt-dlp` установлен и в `PATH` (через `pip install yt-dlp` или другим способом)
+- `hls.js` уже в `package.json`
+- Порты 1420 (Vite), 3001 (axum), 5432 (postgres), 6380 (redis) свободны
 
 ---
 
-## 2. Добавление новой YouTube камеры
+## 2. Добавление новой камеры в seed
 
-```bash
-# 1. Найти YouTube Live stream ID (из URL: youtube.com/live/XXXXXXXXXXX)
+С M3 камеры живут в SQL-миграциях, не в JSON, и URL никогда не торчит в API.
 
-# 2. Добавить в vite.config.ts → YOUTUBE_IDS:
-#    'my-camera-slug': 'XXXXXXXXXXX',
-
-# 3. Добавить mock камеру в src/hooks/useNearbyCameras.ts → MOCK_CAMERAS:
-#    makeMock('my-camera-slug', 'Camera Name', lat, lng, 'city', height,
-#      { azimuth: 180, elevation: -20, fovHorizontal: 80, fovVertical: 50 },
-#      streamUrl('my-camera-slug')),
-
-# 4. HMR подхватит – перезагрузка не нужна
+```sql
+-- Новая миграция, например 011_seed_more_cameras.sql
+INSERT INTO cameras (
+    name, slug, camera_type,
+    country, country_code, city,
+    location, timezone,
+    stream_url, stream_type,
+    stream_source_type, stream_source_config,
+    category, description_en,
+    resolution_w, resolution_h, codec,
+    height_above_ground, camera_azimuth, camera_elevation, fov_horizontal, fov_vertical,
+    added_to_placebo_at, created_at
+) VALUES (
+    'My Camera', 'my-camera-slug', 'public',
+    'Country', 'CC', 'City',
+    ST_SetSRID(ST_Point(lng, lat), 4326), 'IANA/Tz',
+    'youtube://VIDEO_ID', 'youtube',
+    'youtube_live', '{"videoId":"VIDEO_ID"}'::jsonb,
+    'city', 'Description',
+    1920, 1080, 'h264',
+    8, 180, -15, 80, 50,
+    NOW(), NOW()
+);
 ```
+
+После этого:
+
+1. `cargo sqlx migrate run` (axum накатит при старте сам).
+2. Перезапустить axum.
+3. Опционально: добавить YouTube ID в `scripts/verify-youtube-seed.sh` и прогнать его.
+
+В pgsql БД ставит фронт. Никаких изменений в `vite.config.ts` или mock-хуках больше не требуется – `useCamerasFromApi` подтянет новую камеру автоматически.
+
+Для **демо-камеры** (`stream_source_type = 'loop_mp4'`) добавить MP4 + HLS-сегменты в `crates/placebo-api/static/demo/<asset>/`. Подробности – `crates/placebo-api/static/demo/README.md`.
+
+Для **direct HLS** (`stream_source_type = 'direct_hls'`) – `stream_source_config = '{"url":"https://..."}'`.
+
+Для **rtsp** – пока не поддерживается прокси (вернёт 404 на /hls-proxy/<slug>); ингест RTSP через FFmpeg = отдельная задача в M5+.
 
 ---
 

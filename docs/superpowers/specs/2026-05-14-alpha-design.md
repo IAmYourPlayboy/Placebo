@@ -375,26 +375,26 @@ GET /api/v1/hls-proxy/{camera_slug}/seg/{segment_path} → возвращает 
 
 ## 6. Экраны альфы
 
-| Figma-макет | Текущий код | Путь в альфе | Путь в router | Примечание |
+| Figma-макет | Файл-источник в репо | Status | Путь в router | Примечание |
 |---|---|---|---|---|
-| Welcome (Placebo / Зарегистрироваться / Войти) | нет | **create** | `/welcome` | Только email, соцсети disabled |
-| Create account | нет | **create** | `/register` | Форма по макету: никнейм + email + опциональные |
-| Login (отдельного макета нет) | нет | **create** (производный) | `/login` | Минимальная форма |
-| Main (Главная) | HomeScreen.tsx | **rewrite** | `/home` | Карточки открытых комнат + популярное |
-| Categories (Категории) | ExploreScreen.tsx | **rewrite → CategoriesScreen** | `/categories` | 11 тайлов, работает "Онлайн карта мира" |
-| Online map of the world | World3DScreen.tsx | **keep, integrate with shell** | `/world` | Вход из Категорий |
-| Camera view (в 3D) | встроено в World3DScreen | **keep, stabilize** | `/world/camera/:id` | |
-| Channel / stream view | нет (WatchRoomScreen – заглушка) | **create** | `/room/:id` | Это и есть watch-room с камерой+чатом |
-| Create hub | CreateScreen.tsx | **rewrite** | `/create` | 4 тайла, работает "Комната для просмотра" |
-| Profile | ProfileScreen.tsx | **rewrite** | `/profile/:username` | По макету |
-| Settings | нет | **create** | `/settings` | Выход, тема, язык |
-| Friends ("Люди") | FriendsScreen.tsx (заглушка) | **minimal create** | `/people` | Список друзей, добавить/удалить |
-| Notifications | нет | **skeleton** | `/notifications` | Пустой экран "Пока нет" |
-| History | нет | **skeleton** | `/history` | Пустой |
-| Favorites | нет | **skeleton** | `/favorites` | Пустой |
-| Folders | нет | **skeleton** | `/folders` | Пустой |
-| Movie card (Violet Evergarden) | нет | **not in alpha** | – | Карточка фильма – отдельный pipeline, вне альфы |
-| Subscription | нет | **not in alpha** | – | Монетизация вне альфы |
+| Welcome | `src/screens/auth/WelcomeScreen.tsx` | ✅ M2 | `/welcome` | Только email, соцсети disabled |
+| Create account | `src/screens/auth/RegisterScreen.tsx` | ✅ M2 | `/register` | Никнейм + email + опциональные |
+| Login | `src/screens/auth/LoginScreen.tsx` | ✅ M2 | `/login` | Минимальная форма |
+| Main (Главная) | `src/screens/main/HomeScreen.tsx` | ✅ M4 | `/home` | Карточки открытых комнат + популярное (mock) |
+| Categories (Категории) | `src/screens/categories/CategoriesScreen.tsx` | ✅ M4 | `/categories` | 13 тайлов, активна только "Онлайн карта мира" |
+| Online map of the world | `src/screens/world/World3DScreen.tsx` | ✅ M4 | `/world`, `/world/:id` | Камеры из `/api/v1/cameras` |
+| Camera view (в 3D) | `src/screens/world/CameraDetailPanel.tsx` | ✅ M4 (panel-only) | `/world/:slug` | Слот "Смотреть вместе" → `/create?camera=...` (M5 переделает) |
+| Channel / stream view | `src/screens/WatchRoomScreen.tsx` (legacy) | ⏳ M5 | `/room/:id` | Watch-room с камерой+чатом+WS |
+| Create hub | `src/screens/CreateScreen.tsx` (legacy) | ⏳ M5/M6 | `/create` | 4 тайла, работает "Комната для просмотра" |
+| Profile | `src/screens/profile/ProfilePlaceholder.tsx` | ⏳ M6 | `/profile/:username` | По макету |
+| Settings | `src/screens/settings/SettingsScreen.tsx` | ✅ M1 (минимум) | `/settings` | Выход, тема, язык |
+| Friends ("Люди") | `src/screens/skeletons/PeopleScreen.tsx` | ⏳ M6 | `/people` | Список друзей, добавить/удалить |
+| Notifications | `src/screens/skeletons/NotificationsScreen.tsx` | ✅ skeleton M1 | `/notifications` | Пустой экран "Пока нет" |
+| History | `src/screens/skeletons/HistoryScreen.tsx` | ✅ skeleton M1 | `/history` | Пустой |
+| Favorites | `src/screens/skeletons/FavoritesScreen.tsx` | ✅ skeleton M1 | `/favorites` | Пустой |
+| Folders | `src/screens/skeletons/FoldersScreen.tsx` | ✅ skeleton M1 | `/folders` | Пустой |
+| Movie card (Violet Evergarden) | – | 🚫 not in alpha | – | Отдельный pipeline, вне альфы |
+| Subscription | – | 🚫 not in alpha | – | Монетизация вне альфы |
 
 ---
 
