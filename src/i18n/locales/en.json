@@ -84,6 +84,18 @@
   "categories.cartoons": "Cartoons for kids",
   "categories.coming_soon": "Coming soon",
 
+  "world.watch_together": "Watch together",
+  "world.close": "Close",
+  "world.live": "LIVE",
+  "world.nearby": "{{count}} cameras nearby",
+  "world.loading": "Loading cameras...",
+  "world.empty": "No cameras to display",
+  "world.error": "Failed to load cameras: {{msg}}",
+  "world.hint.rotate": "RMB – rotate",
+  "world.hint.move": "WASD – move",
+  "world.hint.zoom": "Wheel – zoom",
+  "world.hint.reset": "Space – reset",
+
   "settings.title": "Settings",
   "settings.theme.title": "Theme",
   "settings.theme.light": "Light",

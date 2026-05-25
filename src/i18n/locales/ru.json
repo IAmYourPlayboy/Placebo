@@ -84,6 +84,18 @@
   "categories.cartoons": "Мультики для детей",
   "categories.coming_soon": "Скоро",
 
+  "world.watch_together": "Смотреть вместе",
+  "world.close": "Закрыть",
+  "world.live": "LIVE",
+  "world.nearby": "{{count}} камер рядом",
+  "world.loading": "Загружаем камеры...",
+  "world.empty": "Нет камер для отображения",
+  "world.error": "Не удалось загрузить камеры: {{msg}}",
+  "world.hint.rotate": "ПКМ – вращать",
+  "world.hint.move": "WASD – двигаться",
+  "world.hint.zoom": "Колёсико – zoom",
+  "world.hint.reset": "Пробел – сброс",
+
   "settings.title": "Настройки",
   "settings.theme.title": "Тема",
   "settings.theme.light": "Светлая",

@@ -12,9 +12,8 @@ interface State {
 /**
  * Fetch the camera roster from the placebo-api on mount.
  *
- * Lives next to the M3-era mock-driven `useNearbyCameras` for now;
- * M4 rewires World3D to use this hook (see plan
- * `docs/superpowers/plans/2026-05-14-milestone-4-home-categories-world.md`).
+ * Used by World3DScreen since M4 to drive the 3D map; the legacy
+ * mock-driven `useNearbyCameras` was removed in the same milestone.
  */
 export function useCamerasFromApi(perPage = 50): State {
   const [state, setState] = useState<State>({

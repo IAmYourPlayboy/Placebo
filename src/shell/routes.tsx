@@ -14,11 +14,11 @@ import RegisterScreen from "../screens/auth/RegisterScreen";
 import LoginScreen from "../screens/auth/LoginScreen";
 
 import CategoriesScreen from "../screens/categories/CategoriesScreen";
+import World3DScreen from "../screens/world/World3DScreen";
 
 // Старые экраны-прототипы: продолжают работать до момента своего переписывания.
 import CreateScreen from "../screens/CreateScreen";
 import WatchRoomScreen from "../screens/WatchRoomScreen";
-import World3DScreen from "../screens/World3DScreen";
 
 /**
  * Wrap a route element with AuthGuard. Anonymous visitors are redirected to /welcome;
@@ -45,10 +45,11 @@ export const routes: RouteObject[] = [
   { path: "/settings", element: guarded(<SettingsScreen />) },
   { path: "/profile", element: guarded(<ProfilePlaceholder />) },
   { path: "/profile/:username", element: guarded(<ProfilePlaceholder />) },
-  // TODO(M5/M4): WatchRoomScreen и World3DScreen ждут onBack. window.history.back()
-  // дёргает историю Tauri webview, а не per-tab MemoryRouter, поэтому в рамках shell
-  // это no-op. Эти экраны переписываются в M4/M5 на useNavigate(-1) – тогда проп уйдёт.
+  // TODO(M5): WatchRoomScreen ждёт onBack. window.history.back() дёргает историю
+  // Tauri webview, а не per-tab MemoryRouter, поэтому в рамках shell это no-op.
+  // Этот экран переписывается в M5 на useNavigate(-1) – тогда проп уйдёт.
   { path: "/room/:id", element: guarded(<WatchRoomScreen onBack={() => window.history.back()} />) },
-  { path: "/world", element: guarded(<World3DScreen onBack={() => window.history.back()} />) },
+  { path: "/world", element: guarded(<World3DScreen />) },
+  { path: "/world/:id", element: guarded(<World3DScreen />) },
   { path: "*", element: <Navigate to="/home" replace /> },
 ];
