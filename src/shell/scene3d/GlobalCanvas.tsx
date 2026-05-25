@@ -1,12 +1,10 @@
-import { useScene3D } from "./Scene3DRegistry";
-
 /**
- * Single shared GL context for the whole app. Currently a stub that
- * renders nothing when no scene is active; M4 mounts @react-three/fiber
- * Canvas here and hosts the active scene via portal.
+ * Stub. Portal-based 3D canvas virtualization is a deferred alpha
+ * decision (alpha-design.md §10): each World3DScreen owns its own
+ * R3F <Canvas> directly, and this component intentionally renders
+ * nothing. Revisit in M7+ if multiple concurrent 3D scenes become a
+ * memory issue.
  */
 export default function GlobalCanvas() {
-  const { activeSceneId } = useScene3D();
-  if (!activeSceneId) return null;
-  return <div className="global-canvas" data-scene-id={activeSceneId} />;
+  return null;
 }
