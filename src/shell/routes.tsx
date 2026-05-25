@@ -1,7 +1,7 @@
 import { JSX } from "react";
 import { Navigate, RouteObject } from "react-router-dom";
 import { AuthGuard } from "../auth/AuthGuard";
-import HomePlaceholder from "../screens/main/HomePlaceholder";
+import HomeScreen from "../screens/main/HomeScreen";
 import NotificationsScreen from "../screens/skeletons/NotificationsScreen";
 import HistoryScreen from "../screens/skeletons/HistoryScreen";
 import FavoritesScreen from "../screens/skeletons/FavoritesScreen";
@@ -33,7 +33,7 @@ export const routes: RouteObject[] = [
   { path: "/login", element: <LoginScreen /> },
 
   { path: "/", element: <Navigate to="/home" replace /> },
-  { path: "/home", element: guarded(<HomePlaceholder />) },
+  { path: "/home", element: guarded(<HomeScreen />) },
   { path: "/categories", element: guarded(<ExploreScreen />) },
   { path: "/create", element: guarded(<CreateScreen />) },
   { path: "/people", element: guarded(<PeopleScreen />) },
